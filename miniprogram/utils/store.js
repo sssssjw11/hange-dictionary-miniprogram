@@ -1,16 +1,16 @@
 const KEY = 'hange.learning.v1';
 const SETTINGS = 'hange.settings.v1';
-function key(word) { return String(word || '').replace(/’/g, "'").replace(/_/g, ' ').trim().replace(/\s+/g, ' ').toLowerCase(); }
+function key(word) { const value = String(word || ''); return (value.normalize ? value.normalize('NFC') : value).replace(/’/g, "'").replace(/_/g, ' ').trim().replace(/\s+/g, ' ').toLowerCase(); }
 function bytes(text) { let n = 0; for (const char of text) { const c = char.codePointAt(0); n += c < 128 ? 1 : c < 2048 ? 2 : c < 65536 ? 3 : 4; } return n; }
 function read() {
-  const value = wx.getStorageSync(KEY);
+  const combined=wx.getStorageSync('hange.records.heads.v1');const value = combined&&combined.learning?combined.learning:wx.getStorageSync(KEY);
   if (!value) return { favorites: [], history: [] };
   if (!Array.isArray(value.favorites) || !Array.isArray(value.history)) throw new Error('本地学习记录格式异常，请先导出或检查备份');
   return JSON.parse(JSON.stringify(value));
 }
 function write(value) {
   if (bytes(JSON.stringify(value)) > 850000) throw new Error('生词本接近单条缓存容量，请导出备份后整理笔记');
-  wx.setStorageSync(KEY, value);
+  const combined=wx.getStorageSync('hange.records.heads.v1');if(combined&&combined.learning){combined.learning=value;if(bytes(JSON.stringify(combined))>950000)throw new Error('本地学习数据容量不足，请先导出备份');wx.setStorageSync('hange.records.heads.v1',combined);}else wx.setStorageSync(KEY, value);
 }
 function favorites() { return read().favorites.slice().sort((a, b) => b.updated - a.updated); }
 function favorite(word) { return read().favorites.find(x => key(x.word) === key(word)) || null; }
@@ -55,4 +55,6 @@ function importJson(text) {
 }
 function settings() { return Object.assign({ theme: 'system', fontSize: 16, apiBase: null, online: true }, wx.getStorageSync(SETTINGS) || {}); }
 function saveSettings(value) { wx.setStorageSync(SETTINGS, Object.assign(settings(), value)); }
-module.exports = { key, bytes, favorites, favorite, toggle, saveNote, visit, history, clearHistory, exportJson, parseImport, importJson, settings, saveSettings };
+function snapshot(){return read();}
+function mergeSnapshot(value){if(!value||!Array.isArray(value.favorites)||!Array.isArray(value.history)||value.history.length>100||value.favorites.length>10000)throw new Error('学习备份格式无效');const items=[];for(let index=0;index<value.favorites.length;index+=2000)items.push(...parseImport(JSON.stringify({format:'hange-local-notebook',version:1,items:value.favorites.slice(index,index+2000)})));const data=read(),seen=new Set(data.favorites.map(item=>key(item.word)));for(const item of items)if(!seen.has(item.word)){seen.add(item.word);data.favorites.push(item);}const current=new Set(data.history.map(item=>key(item.word)));for(const item of value.history){if(!item||typeof item.word!=='string'||!item.word.trim()||item.word.length>256||typeof item.meaning!=='string'||item.meaning.length>4000)throw new Error('历史记录格式无效');if(!current.has(key(item.word))){current.add(key(item.word));data.history.push({word:key(item.word),meaning:item.meaning,visited:Number(item.visited)||0,hits:Number(item.hits)||1});}}data.history.sort((a,b)=>b.visited-a.visited);data.history=data.history.slice(0,100);if(bytes(JSON.stringify(data))>850000)throw new Error('合并后的生词本容量过大，原数据未修改');return data;}
+module.exports = { key, bytes, favorites, favorite, toggle, saveNote, visit, history, clearHistory, exportJson, parseImport, importJson, settings, saveSettings, snapshot, mergeSnapshot };

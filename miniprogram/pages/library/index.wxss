@@ -1,0 +1,1 @@
+.editor{margin:26rpx 0}.article-text{height:450rpx;line-height:1.85;margin:20rpx 0}.library-row{display:flex;align-items:center}.library-row+.library-row{border-top:1rpx solid var(--line)}.library-row .word-row{flex:1;min-width:0}.delete{margin-right:20rpx}.chapter-title{padding:24rpx 28rpx}.library-row .word{font-size:31rpx}

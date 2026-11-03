@@ -1,0 +1,1 @@
+.daily-card{padding:40rpx 32rpx;margin:32rpx 0}.daily-en{display:block;font-size:42rpx;line-height:1.75}.daily-zh{display:block;font-size:30rpx;color:var(--muted);line-height:1.95;margin-top:28rpx}.play{margin:30rpx 0 20rpx}.daily-card .text-button{margin:14rpx 0}

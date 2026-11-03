@@ -1,0 +1,6 @@
+rapidocr>=3,<4
+onnxruntime>=1.20
+imageio-ffmpeg>=0.6
+vosk==0.3.45
+Pillow>=10
+PyMuPDF>=1.24,<2

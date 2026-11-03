@@ -1,16 +1,78 @@
 {
-  "pages": ["pages/search/index", "pages/entry/index", "pages/notebook/index", "pages/history/index", "pages/settings/index"],
-  "window": {"navigationBarTitleText": "涵词典", "navigationBarBackgroundColor": "#f4f8fb", "navigationBarTextStyle": "black", "backgroundColor": "#f4f8fb", "backgroundTextStyle": "light"},
+  "pages": [
+    "pages/search/index",
+    "pages/ai/index",
+    "pages/notebook/index",
+    "pages/study/index",
+    "pages/profile/index",
+    "pages/entry/index",
+    "pages/history/index",
+    "pages/settings/index",
+    "pages/dictionaries/index",
+    "pages/review/index",
+    "pages/wordlist/index",
+    "pages/capture/index",
+    "pages/translate/index",
+    "pages/library/index",
+    "pages/reader/index",
+    "pages/sentences/index",
+    "pages/backup/index",
+    "pages/daily/index",
+    "pages/knowledge/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "涵词典",
+    "navigationBarBackgroundColor": "@pageBackground",
+    "navigationBarTextStyle": "@navigationText",
+    "backgroundColor": "@pageBackground",
+    "backgroundTextStyle": "@backgroundText"
+  },
   "tabBar": {
-    "color": "#8193a1", "selectedColor": "#267fbb", "backgroundColor": "#ffffff", "borderStyle": "white",
+    "color": "@tabText",
+    "selectedColor": "@tabSelected",
+    "backgroundColor": "@tabBackground",
+    "borderStyle": "@tabBorder",
     "list": [
-      {"pagePath": "pages/search/index", "text": "查词", "iconPath": "assets/search.png", "selectedIconPath": "assets/search-on.png"},
-      {"pagePath": "pages/notebook/index", "text": "生词本", "iconPath": "assets/bookmark.png", "selectedIconPath": "assets/bookmark-on.png"},
-      {"pagePath": "pages/history/index", "text": "记录", "iconPath": "assets/history.png", "selectedIconPath": "assets/history-on.png"}
+      {
+        "text": "词典",
+        "iconPath": "assets/search.png",
+        "selectedIconPath": "assets/search-on.png",
+        "pagePath": "pages/search/index"
+      },
+      {
+        "text": "AI",
+        "iconPath": "assets/ai.png",
+        "selectedIconPath": "assets/ai-on.png",
+        "pagePath": "pages/ai/index"
+      },
+      {
+        "text": "生词笔记",
+        "iconPath": "assets/bookmark.png",
+        "selectedIconPath": "assets/bookmark-on.png",
+        "pagePath": "pages/notebook/index"
+      },
+      {
+        "text": "学习",
+        "iconPath": "assets/study.png",
+        "selectedIconPath": "assets/study-on.png",
+        "pagePath": "pages/study/index"
+      },
+      {
+        "text": "我的",
+        "iconPath": "assets/profile.png",
+        "selectedIconPath": "assets/profile-on.png",
+        "pagePath": "pages/profile/index"
+      }
     ]
   },
   "style": "v2",
   "darkmode": true,
+  "themeLocation": "theme.json",
   "lazyCodeLoading": "requiredComponents",
-  "sitemapLocation": "sitemap.json"
+  "sitemapLocation": "sitemap.json",
+  "networkTimeout": {
+    "downloadFile": 120000,
+    "request": 120000,
+    "uploadFile": 120000
+  }
 }

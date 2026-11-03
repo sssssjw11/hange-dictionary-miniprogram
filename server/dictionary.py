@@ -40,6 +40,14 @@ class Engine:
         self.folder = Path(folder) if folder else find_data()
         self.base = self.folder / 'dictionary.db'
         self.oxford = self.folder / 'oxford/oxford.db'
+        self.chinese_index = self.folder / 'oxford/chinese.db'
+        self.oxford_chinese = False
+        if self.chinese_index.is_file() and self.oxford.is_file():
+            try:
+                with closing(connect(self.chinese_index)) as index, closing(connect(self.oxford)) as source:
+                    self.oxford_chinese = index.execute("SELECT value FROM metadata WHERE key='source_sha256'").fetchone() == source.execute("SELECT value FROM metadata WHERE key='source_sha256'").fetchone()
+            except sqlite3.Error:
+                self.oxford_chinese = False
         self.teaching = json.loads((ROOT / 'miniprogram/data/learning.json').read_text('utf-8'))
         self.counts = {'base': 0, 'oxford': 0}
         for name, file in [('base', self.base), ('oxford', self.oxford)]:
@@ -51,7 +59,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'version': '1.0.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'version': '2.0.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -109,6 +117,19 @@ class Engine:
         result = [{'word': word, 'meaning': note['title']} for word, note in self.teaching.items()
                   if len(term) >= 2 and term in json.dumps(note, ensure_ascii=False)]
         seen = {row['word'] for row in result}
+        if self.oxford_chinese and len(term)>=2:
+            grams=set()
+            for phrase in re.findall('[\u3400-\u9fff]+',term):grams.update(phrase[offset:offset+2] for offset in range(len(phrase)-1))
+            if grams:
+                query=' AND '.join('"'+gram+'"' for gram in sorted(grams))
+                with closing(connect(self.chinese_index)) as index,closing(connect(self.oxford)) as source:
+                    rows=index.execute('SELECT d.id,d.word,d.brief FROM search JOIN documents d ON d.id=search.rowid WHERE search MATCH ? ORDER BY CASE WHEN d.brief=? THEN 0 WHEN d.brief LIKE ? THEN 1 ELSE 2 END,d.length,length(d.word),d.word',(query,term,term+'%'))
+                    for identifier,word,brief in rows:
+                        if word in seen:continue
+                        body=source.execute('SELECT body FROM entries WHERE id=?',(identifier,)).fetchone()[0]
+                        text=BeautifulSoup(zlib.decompress(body).decode(),'html.parser').get_text()
+                        if term in text:seen.add(word);result.append({'word':word,'meaning':brief})
+                        if len(result)>=40:break
         if not self.base.is_file():
             return result[:40]
         escaped = term.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
@@ -160,19 +181,23 @@ class Engine:
             if code in labels and word:
                 data['forms'].append({'label': labels[code], 'word': word})
         data['tags'] = (data.pop('tagsRaw', '') or '').split()
-        blocks, related = [], []
+        blocks, related, examples, phonetics, brief = [], [], [], {}, ''
         for identifier, headword, html in pages:
-            rendered, links = rich_blocks(html)
+            rendered, links, info = rich_blocks(html, with_info=True)
             for nodes in rendered:
                 blocks.append({'id': str(identifier) + '-' + str(len(blocks)), 'nodes': nodes})
             related.extend(links)
-        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks}
+            examples.extend(info['examples']);phonetics.update(info['phonetics'])
+            if not brief:brief=info['brief']
+        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief}
+        data['brief']=brief
+        data['phonetics']=phonetics
         related.extend((data.get('teaching') or {}).get('related', []))
         data['related'] = list(dict.fromkeys(related))[:60]
         return data
 
 
-def rich_blocks(html):
+def rich_blocks(html, with_info=False):
     """Map every source text node to trusted mini-program rich-text nodes.
 
     Unknown/custom tags are mapped rather than dropped; source JavaScript is never
@@ -260,4 +285,14 @@ def rich_blocks(html):
             current_size += length
     if current:
         blocks.append(current)
+    if with_info:
+        phonetics={}
+        for cls,variant in [('phons_br','uk'),('phons_n_am','us')]:
+            node=soup.select_one('.'+cls+' .phon')
+            if node:phonetics[variant]=node.get_text(' ',strip=True)
+        examples=[]
+        for node in soup.select('.x'):
+            sibling=node.find_next_sibling();examples.append({'en':node.get_text(' ',strip=True),'zh':sibling.get_text(' ',strip=True) if sibling and sibling.name.lower()=='xt' else '', 'source':'牛津十版'})
+        first=soup.find('chn')
+        return blocks,list(dict.fromkeys(related)),{'phonetics':phonetics,'examples':examples,'brief':first.get_text(' ',strip=True) if first else ''}
     return blocks, list(dict.fromkeys(related))

@@ -26,6 +26,20 @@ def node_text(nodes):
 
 
 class RendererTest(unittest.TestCase):
+    def test_oxford_only_full_chinese_index(self):
+        sys.path.insert(0,str(ROOT/'scripts'))
+        from build_chinese_index import build
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary);(folder/'oxford').mkdir();source=folder/'oxford/oxford.db'
+            with closing(sqlite3.connect(source)) as db:
+                db.executescript('CREATE TABLE metadata(key TEXT,value TEXT); CREATE TABLE entries(id INTEGER PRIMARY KEY,key TEXT,compact TEXT,word TEXT,body BLOB,target TEXT);')
+                db.execute('INSERT INTO metadata VALUES (?,?)',('source_sha256','fixture'))
+                db.execute('INSERT INTO entries VALUES (1,?,?,?,?,NULL)',('demo','demo','demo',zlib.compress('<chn>非常罕见的词典示例</chn>'.encode())))
+                db.commit()
+            build(source,folder/'oxford/chinese.db');engine=Engine(folder)
+            self.assertTrue(engine.status()['oxfordChineseIndex']);self.assertEqual(engine.lookup('罕见')['word'],'demo')
+            self.assertEqual(engine.lookup('不存在的中文')['kind'],'matches')
+
     def test_imported_oxford_only_service_without_base_database(self):
         with tempfile.TemporaryDirectory() as temporary:
             folder = Path(temporary)
@@ -89,8 +103,9 @@ class LocalDictionaryTest(unittest.TestCase):
         (ROOT / 'output/content-verification.json').write_text(json.dumps(checks, indent=2), 'utf-8')
 
     def test_chinese_lookup_and_aliases(self):
-        self.assertEqual(self.engine.lookup('人际交往能力')['word'], 'interpersonal skills')
-        self.assertEqual(self.engine.lookup('伸出援手')['word'], 'reach out')
+        for query,word in [('人际交往能力','interpersonal skills'),('伸出援手','reach out')]:
+            result=self.engine.lookup(query)
+            self.assertIn(word,[result['word']] if result['kind']=='entry' else [item['word'] for item in result['matches']])
         self.assertIn('apple', [row['word'] for row in self.engine.lookup('苹果')['matches']])
         self.assertTrue(self.engine.lookup('running')['oxford']['blocks'])
         self.assertIn('subordinate', [row['word'] for row in self.engine.suggest('subo')])

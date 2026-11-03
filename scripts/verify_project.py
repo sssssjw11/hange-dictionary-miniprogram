@@ -17,6 +17,10 @@ def main():
     assert config['compileType'] == 'miniprogram'
     assert config['appid'] == 'touristappid' or re.fullmatch(r'wx[0-9a-f]{16}', config['appid'])
     assert not app.get('permission') and not app.get('requiredPrivateInfos')
+    themes = json.loads((mini / app['themeLocation']).read_text('utf-8'))
+    for value in list(app['window'].values()) + [item for key,item in app['tabBar'].items() if key != 'list']:
+        if isinstance(value,str) and value.startswith('@'):
+            assert all(value[1:] in themes[theme] for theme in ['light','dark'])
     for page in app['pages']:
         for extension in ['.js', '.json', '.wxml', '.wxss']:
             assert (mini / (page + extension)).is_file(), page + extension
@@ -25,6 +29,10 @@ def main():
         for event in re.findall(r'\b(?:bind|catch)(?:\w+|:[\w-]+)="(\w+)"', template):
             assert re.search(r'\b' + event + r'\s*\(', source), (page, event)
         assert '<web-view' not in template
+        for method,route in re.findall(r"wx\.(navigateTo|switchTab)\(\{\s*url:\s*['\"](/pages/[^'\"?]+)",source):
+            assert route[1:] in app['pages'], (page,route)
+            tab = any(item['pagePath'] == route[1:] for item in app['tabBar']['list'])
+            assert tab == (method == 'switchTab'), (page,method,route)
     for item in app['tabBar']['list']:
         assert item['pagePath'] in app['pages']
         for key in ['iconPath', 'selectedIconPath']:
@@ -45,7 +53,7 @@ def main():
     assert len(data['entries']) == 97
     assert all(not entry['oxford']['blocks'] for entry in data['entries'].values())
     assert 'source_sha256' not in offline
-    report = {'pages': app['pages'], 'native_wxml_wxss': True, 'web_view_wrappers': 0, 'package_bytes': size, 'package_under_2_MiB': True, 'built_in_entries': len(data['entries']), 'built_in_aliases': len(data['aliases']), 'oxford_content_in_public_package': False, 'login_or_profile_permission_calls': 0, 'full_dictionary': 'read-only local/HTTPS API plus on-device cache', 'phone_runtime_tested': False}
+    report = {'pages': app['pages'], 'native_wxml_wxss': True, 'web_view_wrappers': 0, 'package_bytes': size, 'package_under_2_MiB': True, 'built_in_entries': len(data['entries']), 'built_in_aliases': len(data['aliases']), 'oxford_content_in_public_package': False, 'login_or_profile_permission_calls': 0, 'full_dictionary': 'full imported native offline pack, optional read-only API, and query cache', 'phone_runtime_tested': False}
     (ROOT / 'output').mkdir(exist_ok=True)
     (ROOT / 'output/project-verification.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), 'utf-8')
     print(json.dumps(report, ensure_ascii=False, indent=2))

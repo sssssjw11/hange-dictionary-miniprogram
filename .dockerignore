@@ -2,6 +2,11 @@
 node_modules
 output
 server/data
+server/models
+server/runtime
+server/.optional-python
+private
+project.private.config.json
 *.db
 *.mdx
 *.mdd

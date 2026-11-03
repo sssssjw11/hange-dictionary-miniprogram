@@ -13,4 +13,5 @@ function error(error) { wx.showToast({ title: error.message || '操作未完成�
 function open(word) { wx.navigateTo({ url: '/pages/entry/index?q=' + encodeURIComponent(word) }); }
 function confirm(title, content) { return new Promise(resolve => wx.showModal({ title, content, success: result => resolve(result.confirm), fail: () => resolve(false) })); }
 function dataset(event, field = 'word') { return event.currentTarget.dataset[field]; }
-module.exports = { apply, error, open, confirm, dataset };
+function decode(value) { try { return decodeURIComponent(value || ''); } catch (_) { return value || ''; } }
+module.exports = { apply, error, open, confirm, dataset, decode };

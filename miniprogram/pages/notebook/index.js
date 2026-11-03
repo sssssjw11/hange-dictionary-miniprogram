@@ -1,13 +1,15 @@
 const store = require('../../utils/store');
 const ui = require('../../utils/ui');
+const list = require('../../utils/list');
 Page({
-  data: { rows: [], query: '', count: 0, theme: 'light' },
+  data: { rows: [], query: '', count: 0, total: 0, listPage: 0, listPages: 1, theme: 'light' },
   onShow() { ui.apply(this); this.refresh(); },
-  refresh() { try { const all = store.favorites(), query = this.data.query.toLowerCase(); this.setData({ rows: all.filter(x => (x.word + x.meaning + x.note).toLowerCase().includes(query)), count: all.length }); } catch (error) { ui.error(error); } },
+  refresh(index=0) { try { const all = store.favorites(), query = this.data.query.toLowerCase(); this.setData(Object.assign({count:all.length},list.page(all.filter(x => (x.word + x.meaning + x.note).toLowerCase().includes(query)),index))); } catch (error) { ui.error(error); } },
+  onPrev(){this.refresh(this.data.listPage-1);},onNext(){this.refresh(this.data.listPage+1);},
   onInput(event) { this.setData({ query: event.detail.value }); this.refresh(); },
   onWord(event) { ui.open(ui.dataset(event)); },
   onExport() {
-    try { const text = store.exportJson();
+    try { if(store.favorites().length>2000)return wx.navigateTo({url:'/pages/backup/index'});const text = store.exportJson();
       wx.showActionSheet({ itemList: ['导出 JSON 文件', '复制备份文本'], success: result => {
         if (result.tapIndex === 1) return wx.setClipboardData({ data: text });
         const name = '涵词典-生词本-' + Date.now() + '.json', path = wx.env.USER_DATA_PATH + '/' + name;

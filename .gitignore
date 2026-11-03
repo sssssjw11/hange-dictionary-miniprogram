@@ -17,6 +17,9 @@ node_modules/
 *.db.gz
 *.zip
 server/data/
+server/runtime/
+server/models/
+server/.optional-python/
 output/
 project.private.config.json
 *.log

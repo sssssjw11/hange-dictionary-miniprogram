@@ -15,7 +15,7 @@ def main():
     total = 0
     for name in names:
         path = ROOT / name
-        assert not name.startswith(('server/data/', 'output/', 'node_modules/', 'private/')), name
+        assert not name.startswith(('server/data/', 'server/models/', 'server/runtime/', 'server/.optional-python/', 'output/', 'node_modules/', 'private/')), name
         assert path.suffix.lower() not in forbidden and not name.endswith(('.db.gz', '.db-wal', '.db-shm')), name
         assert path.stat().st_size < 1024 * 1024, name
         content = path.read_bytes(); total += len(content)
