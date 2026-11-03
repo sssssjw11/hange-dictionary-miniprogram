@@ -1,0 +1,11 @@
+.git
+node_modules
+output
+server/data
+*.db
+*.mdx
+*.mdd
+*.gz
+*.apk
+*.pem
+.env*

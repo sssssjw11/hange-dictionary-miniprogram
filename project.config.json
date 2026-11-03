@@ -1,0 +1,20 @@
+{
+  "appid": "touristappid",
+  "projectname": "hange-dictionary",
+  "description": "免登录双语词典：查词、生词本、笔记与本地记录",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "miniprogram/",
+  "libVersion": "3.6.6",
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "minifyWXML": true,
+    "minifyWXSS": true,
+    "urlCheck": true,
+    "enhance": true,
+    "checkSiteMap": true
+  },
+  "packOptions": {"ignore": [], "include": []},
+  "condition": {}
+}

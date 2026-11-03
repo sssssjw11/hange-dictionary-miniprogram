@@ -1,0 +1,11 @@
+<view class="page {{theme}}">
+  <view class="brand-row"><view class="brand"><text class="brand-mark">词</text><text>涵词典</text><text class="edition">MINI</text></view><button class="text-button" bindtap="onSettings" aria-label="阅读设置">阅读设置</button></view>
+  <view class="search-wrap"><image class="search-icon" src="/assets/search-on.png"/><input class="search-input" value="{{query}}" placeholder="查英文单词、短语或中文释义" placeholder-class="muted" confirm-type="search" maxlength="256" bindinput="onInput" bindconfirm="onSearch"/><button wx:if="{{query}}" class="clear" bindtap="onClear" aria-label="清空搜索">×</button><button class="primary search-button" bindtap="onSearch">查词</button></view>
+  <view class="connection"><text class="status-dot"></text><text>{{ready ? (oxford ? '牛津十版 + 双解补充' : '已连接补充词库') : '内置词库 + 已缓存词条可离线查阅'}}</text><text class="local-label">免登录</text></view>
+  <view wx:if="{{suggestions.length}}" class="card suggest-list"><button wx:for="{{suggestions}}" wx:key="word" class="word-row" data-word="{{item.word}}" bindtap="onWord"><text class="word">{{item.word}}</text><text class="meaning">{{item.meaning}}</text></button></view>
+  <view class="hero"><text class="eyebrow">让每个意思都读完整</text><view class="title">查词，也把用法查清楚。</view><view class="subtitle">中英对照 · 用法例句 · 本地生词本</view><view class="chips hero-chips"><button wx:for="{{shortcuts}}" wx:key="*this" class="chip" data-word="{{item}}" bindtap="onWord">{{item}}</button></view></view>
+  <view class="section-head"><text class="section-title">最近查过</text><button class="text-button" bindtap="onHistory">查看全部</button></view>
+  <view class="card"><button wx:for="{{recent}}" wx:key="word" class="word-row" data-word="{{item.word}}" bindtap="onWord"><text class="word">{{item.word}}</text><text class="meaning">{{item.meaning}}</text></button><view wx:if="{{!recent.length}}" class="empty">输入一个单词，开始查词。<view class="small">收藏和笔记只保存在这台设备上。</view></view></view>
+  <view class="capabilities"><view><text class="metric">{{offlineCount}}</text><text class="small muted">内置离线词条</text></view><view><text class="metric">中英双解</text><text class="small muted">查过的完整词条自动缓存</text></view></view>
+  <view class="footer">全量牛津内容需连接自己的词库服务；词库来源会在词条内分别标明。</view>
+</view>

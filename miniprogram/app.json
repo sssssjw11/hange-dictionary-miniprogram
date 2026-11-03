@@ -1,0 +1,16 @@
+{
+  "pages": ["pages/search/index", "pages/entry/index", "pages/notebook/index", "pages/history/index", "pages/settings/index"],
+  "window": {"navigationBarTitleText": "涵词典", "navigationBarBackgroundColor": "#f4f8fb", "navigationBarTextStyle": "black", "backgroundColor": "#f4f8fb", "backgroundTextStyle": "light"},
+  "tabBar": {
+    "color": "#8193a1", "selectedColor": "#267fbb", "backgroundColor": "#ffffff", "borderStyle": "white",
+    "list": [
+      {"pagePath": "pages/search/index", "text": "查词", "iconPath": "assets/search.png", "selectedIconPath": "assets/search-on.png"},
+      {"pagePath": "pages/notebook/index", "text": "生词本", "iconPath": "assets/bookmark.png", "selectedIconPath": "assets/bookmark-on.png"},
+      {"pagePath": "pages/history/index", "text": "记录", "iconPath": "assets/history.png", "selectedIconPath": "assets/history-on.png"}
+    ]
+  },
+  "style": "v2",
+  "darkmode": true,
+  "lazyCodeLoading": "requiredComponents",
+  "sitemapLocation": "sitemap.json"
+}
