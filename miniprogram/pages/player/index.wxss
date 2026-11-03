@@ -1,0 +1,2 @@
+.play-card{padding:40rpx 32rpx;margin:32rpx 0;text-align:center}.play-word{font-size:64rpx;font-weight:700;overflow-wrap:anywhere}.play-meaning{font-size:30rpx;white-space:pre-line;margin:26rpx 0}.play-card .text-button{margin-top:24rpx}.play-settings{padding:12rpx 28rpx;margin-top:28rpx}.play-settings .row{padding:20rpx 0}.play-settings .row+.row{border-top:1rpx solid var(--line)}
+@media(min-width:700px){.play-word{font-size:40px}.play-meaning{font-size:18px}.play-card{padding:28px}.play-settings .row{padding:14px 0}}

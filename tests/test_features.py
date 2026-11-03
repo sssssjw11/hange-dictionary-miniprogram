@@ -115,7 +115,13 @@ class LocalMediaTest(unittest.TestCase):
             body,headers=multipart(wav.read_bytes(),'recording.wav')
             asr=json.load(urlopen(Request(base+'/api/asr',data=body,headers=headers),timeout=120))
             self.assertIn('hello world',asr['text'].lower());self.assertIn('dictionary',asr['text'].lower())
-        report={'real_local_engines':True,'http_multipart_uploads':True,'ocr_text':ocr['text'],'asr_text':asr['text'],'tts_locale':tts['locale'],'uk_voice_fallback':tts['variantFallback'],'wechat_recording_camera_runtime_tested':False}
+            payload=json.dumps({'text':'你好，今天我们学习英语。','language':'zh'}).encode()
+            chinese_tts=json.load(urlopen(Request(base+'/api/tts',data=payload,headers={'Content-Type':'application/json'}),timeout=120))
+            chinese_wav=ROOT/'server/runtime/audio'/(Path(chinese_tts['audioPath']).stem+'.wav')
+            body,headers=multipart(chinese_wav.read_bytes(),'recording.wav',language='zh')
+            chinese_asr=json.load(urlopen(Request(base+'/api/asr',data=body,headers=headers),timeout=120))
+            self.assertIn('你好',chinese_asr['text']);self.assertIn('学习',chinese_asr['text'])
+        report={'real_local_engines':True,'http_multipart_uploads':True,'ocr_text':ocr['text'],'asr_text':asr['text'],'asr_zh_text':chinese_asr['text'],'tts_locale':tts['locale'],'tts_zh_locale':chinese_tts['locale'],'uk_voice_fallback':tts['variantFallback'],'wechat_recording_camera_runtime_tested':False}
         (ROOT/'output').mkdir(exist_ok=True);(ROOT/'output/media-verification.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),'utf-8')
 
 if __name__=='__main__':unittest.main(verbosity=2)

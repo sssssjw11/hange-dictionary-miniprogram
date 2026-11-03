@@ -27,3 +27,13 @@ test('review ignores double submissions and never updates an unloaded page after
   finish({kind:'entry',word:'run',brief:'meaning'});await tick();assert.equal(packets.length,count);assert.ok(study.pending());
  }finally{dictionary.lookup=original;}
 });
+test('word player sequences the whole deck, saves position, and does not count passive playback as review',async()=>{
+ const media=require('../miniprogram/services/media'),lookup=dictionary.lookup,speak=media.speakAndWait;const spoken=[];
+ dictionary.lookup=async word=>({kind:'entry',word,brief:'meaning'});media.speakAndWait=async word=>{spoken.push(word);return {locale:'en-US'};};
+ try{const id=study.createDeck('Playback','apple\nrun');const controller=page('player');controller.onLoad({deck:id});await tick();controller.wait=async()=>{};await controller.onPlay();assert.deepEqual(spoken,['apple','run']);assert.equal(controller.data.playing,false);assert.equal(controller.data.message,'本轮播放完成');assert.equal(study.playback().index,1);assert.equal(study.stats().today.attempts,0);controller.onUnload();}finally{dictionary.lookup=lookup;media.speakAndWait=speak;}
+});
+test('word player pauses on hide and resumes its saved position without late view updates',async()=>{
+ const media=require('../miniprogram/services/media'),lookup=dictionary.lookup,speak=media.speakAndWait;let finish;
+ dictionary.lookup=async word=>({kind:'entry',word,brief:'meaning'});media.speakAndWait=()=>new Promise(resolve=>finish=resolve);
+ try{const id=study.createDeck('Playback','apple\nrun');const controller=page('player');controller.onLoad({deck:id});await tick();const playing=controller.onPlay();await tick();controller.onHide();assert.equal(controller.data.playing,false);const count=packets.length;finish({cancelled:true});await playing;assert.equal(packets.length,count);const resumed=page('player');resumed.onLoad({deck:id});await tick();assert.equal(resumed.data.word,'apple');assert.equal(resumed.data.playing,false);controller.onUnload();resumed.onUnload();}finally{dictionary.lookup=lookup;media.speakAndWait=speak;}
+});

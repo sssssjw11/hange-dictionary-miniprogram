@@ -10,6 +10,7 @@
     "pages/settings/index",
     "pages/dictionaries/index",
     "pages/review/index",
+    "pages/player/index",
     "pages/wordlist/index",
     "pages/capture/index",
     "pages/translate/index",

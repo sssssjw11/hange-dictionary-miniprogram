@@ -9,6 +9,7 @@ Page({
   onStart(){try{const queue=study.queue(this.data.deck);if(!queue.words.length)return ui.error(new Error('没有待学词，先收藏单词、导入词表或调整学习计划'));wx.navigateTo({url:'/pages/review/index?deck='+encodeURIComponent(this.data.deck)+'&mode='+this.data.mode});}catch(error){ui.error(error);}},
   onContinue(){const pending=study.pending();if(pending)wx.navigateTo({url:'/pages/review/index?resume=1'});},
   onMastered(){wx.navigateTo({url:'/pages/wordlist/index?id=mastered'});},
+  onPlayer(){wx.navigateTo({url:'/pages/player/index?deck='+encodeURIComponent(this.data.deck)});},
   onNew(event){this.setData({dailyNew:event.detail.value});},onReview(event){this.setData({dailyReview:event.detail.value});},
   onSavePlan(){try{study.plan(this.data.dailyNew,this.data.dailyReview);this.refresh();wx.showToast({title:'计划已保存'});}catch(error){ui.error(error);}},
   onCreate(){wx.showModal({title:'新建词表',editable:true,placeholderText:'词表名称',success:result=>{if(result.confirm && result.content)wx.navigateTo({url:'/pages/wordlist/index?name='+encodeURIComponent(result.content)});}});},

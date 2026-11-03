@@ -48,7 +48,7 @@ python -m pip install --target server/.optional-python -r server/requirements-me
 | 能力 | 实现 | 输入范围与实际限制 |
 | --- | --- | --- |
 | OCR | RapidOCR + ONNX Runtime，服务器本地推理 | 图像最多 8 MiB、20 MP；服务器缩放至 2400 边长后识别，结果需核对 |
-| 语音识别 | Vosk small EN-US 0.15 / CN 0.22 + FFmpeg | WAV、最多 10 MiB、60 秒；英语识别链路已实测；不是云识别或长录音字幕服务 |
+| 语音识别 | Vosk small EN-US 0.15 / CN 0.22 + FFmpeg | WAV、最多 10 MiB、60 秒；中英识别链路已实测；不是云识别或长录音字幕服务 |
 | 朗读 | Windows System.Speech / SAPI，必要时 FFmpeg 转 MP3 | 每次 1～2500 字；实际音色由系统安装情况决定；Linux 默认不可用 |
 | PDF | PyMuPDF | 含文本 PDF，最多 10 MiB、200 页；不支持加密或直接提取扫描页文字 |
 | EPUB | ZIP/OPF/spine 顺序解析，保留正文 | 最大 10 MiB、解压内容 40 MiB、总正文 80 万字；不运行书内脚本，不处理 DRM |
@@ -58,7 +58,7 @@ Windows 上模型所在目录如果含中文，服务先尝试短路径，再使
 
 Vosk 模型来自 [官方模型清单](https://alphacephei.com/vosk/models)；OCR 实现参考 [RapidOCR 官方项目](https://github.com/RapidAI/RapidOCR)。本仓库不附带权重。当前本地工作区已安装中英 Vosk 模型和可用 OCR，但这些依赖不随公开源码上传。
 
-## AI / 全文翻译：当前待配置
+连续播放位于“学习 → 单词连续播放”，支持顺序、循环、释义朗读和断点位置。音频结束后才推进；切换页面或进入后台暂停，不把播放计作完成复习。原生图片编辑/裁剪位于拍照页面，使用微信 [editImage](https://developers.weixin.qq.com/miniprogram/dev/api/media/image/wx.editImage.html) / [cropImage](https://developers.weixin.qq.com/miniprogram/dev/api/media/image/wx.cropImage.html)。客户端不支持接口时会显示错误，不上传未经用户确认识别的图片。\n\n## AI / 全文翻译：当前待配置
 
 客户端没有模型密钥输入框；密钥只放在配套服务的环境中。没有配置时 `/api/assistant` 返回明确的 HTTP 503，页面禁用发送，不提供预设“AI 答案”或假译文。
 

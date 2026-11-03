@@ -57,6 +57,15 @@ function write(name, controller, width = 390, fileName = name) {
         write(name,controller,width,fileName);
         manifest.push({name,theme,width,file:fileName+'.html'});
       }
+      if(name==='capture'||name==='wordlist'){
+        const variant=name==='capture'?'image':'file';
+        if(name==='capture')controller.setData({imagePath:'/assets/search.png',message:'图片预览布局示例'});
+        else controller.setData({creating:true,fileName:'A'.repeat(180)+'.csv',fileCharacters:500000});
+        for(const width of [320,390,768,1024]){
+          const fileName=name+'-'+variant+'-'+theme+'-'+width;
+          write(name,controller,width,fileName);manifest.push({name:name+'-'+variant,theme,width,file:fileName+'.html'});
+        }
+      }
       if(controller.onUnload)controller.onUnload();
     }
   }

@@ -1,1 +1,2 @@
 .capture-text{height:430rpx;line-height:1.85;margin:24rpx 0}.actions button{padding:16rpx 10rpx;font-size:24rpx}
+.image-card{padding:20rpx;margin:24rpx 0}.capture-image{display:block;width:100%;height:320rpx;background:var(--soft);border-radius:14rpx}.image-card .actions{margin-bottom:0}

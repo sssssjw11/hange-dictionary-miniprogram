@@ -25,6 +25,7 @@ test.beforeEach(()=>{memory.clear();failFile='';failHead=false;});
 
 test('complete backup restores all learning modules and preserves current notes, cards and reading progress',()=>{
  store.saveNote('run','跑','original');study.plan(3,8);study.review('run','good',{event:'saved'});
+ study.playback({deck:'starter',index:1,word:'apple',variant:'US',interval:3,loop:false,readMeaning:false,showMeaning:true});
  const id=library.add('Story','Hello world. 中文🙂');library.progress(id,2);
  sentences.save('Hello world.','你好，世界。','Story','first');
  const source=backup.exportAll();
