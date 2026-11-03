@@ -3,7 +3,7 @@ const ui = require('../../utils/ui');
 Page({
   data: {theme:'light',decks:[],stats:{today:{},plan:{}},deck:'favorites',mode:'flash',dailyNew:'20',dailyReview:'100'},
   onShow() { ui.apply(this); this.refresh(); },
-  refresh() { try { const stats=study.stats();this.setData({decks:study.decks(),stats,dailyNew:String(stats.plan.dailyNew),dailyReview:String(stats.plan.dailyReview)}); } catch(error){ui.error(error);} },
+  refresh() { try { const stats=study.stats();const decks=study.decks();this.setData({decks,deck:decks.some(item=>item.id===this.data.deck)?this.data.deck:'favorites',stats,dailyNew:String(stats.plan.dailyNew),dailyReview:String(stats.plan.dailyReview)}); } catch(error){ui.error(error);} },
   onDeck(event){this.setData({deck:ui.dataset(event,'id')});},
   onMode(event){this.setData({mode:ui.dataset(event,'mode')});},
   onStart(){try{const queue=study.queue(this.data.deck);if(!queue.words.length)return ui.error(new Error('没有待学词，先收藏单词、导入词表或调整学习计划'));wx.navigateTo({url:'/pages/review/index?deck='+encodeURIComponent(this.data.deck)+'&mode='+this.data.mode});}catch(error){ui.error(error);}},

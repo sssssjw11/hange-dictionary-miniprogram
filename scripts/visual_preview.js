@@ -5,7 +5,7 @@ const root = path.resolve(__dirname, '..'), mini = path.join(root, 'miniprogram'
 global.window = global;
 const compile = new Function('global', fs.readFileSync(path.join(root, 'output/wxml-compiled.js'), 'utf8'))({});
 const memory = new Map();
-global.getApp=()=>({globalData:{}});
+const mockApp={globalData:{}};global.getApp=()=>mockApp;
 global.wx = { getStorageSync(key) { return memory.has(key) ? JSON.parse(JSON.stringify(memory.get(key))) : ''; }, setStorageSync(key, value) { memory.set(key, JSON.parse(JSON.stringify(value))); }, getAppBaseInfo() { return { theme: 'light' }; }, setNavigationBarColor() {}, setBackgroundColor() {}, setTabBarStyle() {}, setNavigationBarTitle() {}, showToast() {}, pageScrollTo() {}, request(options) { const url = new URL(options.url); Object.entries(options.data || {}).forEach(([k, v]) => url.searchParams.set(k, v)); fetch(url).then(async response => options.success({ statusCode: response.status, data: await response.json() })).catch(error => options.fail(error)); } };
 function page(name) { let definition; global.Page = value => { definition = value; }; delete require.cache[path.join(mini,'pages',name,'index.js')];require(path.join(mini, 'pages', name, 'index.js')); const instance = { data: JSON.parse(JSON.stringify(definition.data)), setData(value) { Object.assign(this.data, value); } }; Object.entries(definition).forEach(([key, value]) => { if (typeof value === 'function') instance[key] = value.bind(instance); }); return instance; }
 function escape(value) { return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); }
@@ -13,21 +13,27 @@ function rich(node) { if (node.type === 'text') return escape(node.text); const 
 function html(node) {
   if (typeof node === 'string') return escape(node);
   const name = node.tag.replace(/^wx-/, ''), attr = node.attr || {};
+  if(name==='group-picker'){
+    const store=require('../miniprogram/utils/store'),words=Array.isArray(attr.words)&&attr.words.length?attr.words:[attr.word].filter(Boolean),favorites=new Map(store.favorites().map(item=>[store.key(item.word),item]));
+    const members=words.map(word=>(favorites.get(store.key(word))||{}).groups||[]),selected=(members[0]||[]).filter(id=>members.every(ids=>ids.includes(id)));
+    return html(compile('components/group-picker/index.wxml')(Object.assign({},attr,{count:words.length,busy:false,choices:store.groups().map(item=>Object.assign({},item,{checked:selected.includes(item.id)}))})));
+  }
   if (name === 'rich-text') return '<div class="' + escape(attr.class || '') + '">' + (attr.nodes || []).map(rich).join('') + '</div>';
-  const tag = ({ page: 'main', view: 'div', text: 'span', image: 'img', switch: 'input', 'scroll-view':'div' })[name] || name;
+  const tag = ({ page: 'main', view: 'div', text: 'span', image: 'img', switch: 'input', checkbox:'input',picker:'div','checkbox-group':'div', 'scroll-view':'div' })[name] || name;
   let attributes = '';
   for (const [key, value] of Object.entries(attr)) {
     if (['class', 'style', 'placeholder', 'maxlength', 'value', 'id'].includes(key)) attributes += ' ' + key + '="' + escape(value) + '"';
     if (key === 'disabled' && value) attributes += ' disabled';
   }
-  if (name === 'switch') attributes += ' type="checkbox"' + (attr.checked ? ' checked' : '');
+  if (name === 'switch'||name==='checkbox') attributes += ' type="checkbox"' + (attr.checked ? ' checked' : '');
   if (name === 'image') { const image = path.join(mini, String(attr.src).replace(/^\//, '')); attributes += ' src="data:image/png;base64,' + fs.readFileSync(image).toString('base64') + '"'; }
-  return '<' + tag + attributes + '>' + (node.children || []).map(html).join('') + '</' + tag + '>';
+  if(name==='scroll-view'&&(attr['scroll-y']||attr.scrollY))attributes+=' style="overflow-y:auto"';
+  return '<' + tag + attributes + '>' + (name==='textarea'&&attr.value!==undefined?escape(attr.value):(node.children || []).map(html).join('')) + '</' + tag + '>';
 }
 function css(text, width) { return text.replace(/(-?\d+(?:\.\d+)?)rpx/g, (_, number) => Number(number) * width / 750 + 'px').replace(/(?<![.\w-])page(?=\s*\{)/g, 'body').replace(/\bview(?=[,{>\s])/g, 'div').replace(/\btext(?=[,{>\s])/g, 'span'); }
 function write(name, controller, width = 390, fileName = name) {
   const tree = compile('pages/' + name + '/index.wxml')(controller.data);
-  const style = fs.readFileSync(path.join(mini, 'app.wxss'), 'utf8') + fs.readFileSync(path.join(mini, 'pages', name, 'index.wxss'), 'utf8');
+  const style = fs.readFileSync(path.join(mini, 'app.wxss'), 'utf8') + fs.readFileSync(path.join(mini, 'pages', name, 'index.wxss'), 'utf8')+fs.readFileSync(path.join(mini,'components/group-picker/index.wxss'),'utf8');
   const tabList=JSON.parse(fs.readFileSync(path.join(mini,'app.json'),'utf8')).tabBar.list;
   const tabs=tabList.some(tab=>tab.pagePath==='pages/'+name+'/index')?'<footer>'+tabList.map(tab=>'<span>'+escape(tab.text)+'</span>').join('')+'</footer>':'';
   const document = '<!doctype html><html data-theme="'+controller.data.theme+'"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>涵词典 · WXML 投影预览</title><link rel="icon" href="data:,"><style>body{margin:0}*{box-sizing:border-box}input,textarea{max-width:100%}input,textarea{font:inherit}input{border:0;background:none;color:inherit;min-width:0}button{cursor:pointer}img{object-fit:contain}textarea{display:block}main{display:block}footer{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#fff;border-top:1px solid #e0eaf1;padding:12px;font-size:12px;color:#267fbb}.preview-label{background:#eaf4fb;color:#527186;font-size:10px;text-align:center;padding:4px}'+css(style,width)+'</style><div class="preview-label">WXML 编译树投影 · 非微信客户端运行截图</div>'+html(tree)+tabs+'</html>';
@@ -40,6 +46,8 @@ function write(name, controller, width = 390, fileName = name) {
   for(const word of ['run','apple','subordinate','predicative'])store.saveNote(word,'学习释义','在语境中理解和使用这个词。');
   const article=library.add('A small step every day',('Learning a language takes practice. Read a little, ask good questions, and keep useful examples. 中文阅读也可以保留。\n\n').repeat(25));
   sentences.save('A small step every day makes a difference.','每天的一小步会带来变化。','原创布局示例','留意搭配 make a difference。');
+  const book=store.createGroup('Reading / 阅读');store.createGroup('考试 / Course');store.createGroup('X'.repeat(40));store.setGroupsMany(['run','apple'],[book]);
+  const annotation=library.mark(article,0,35,'在原文语境中记下自己的理解。','green');library.bookmark(article,50,'本周阅读');
   study.review('apple','good',{event:'layout-fixture',seconds:12});
   const names=JSON.parse(fs.readFileSync(path.join(mini,'app.json'),'utf8')).pages.map(page=>page.split('/')[1]);
   const manifest=[];
@@ -47,7 +55,7 @@ function write(name, controller, width = 390, fileName = name) {
     store.saveSettings({theme,fontSize:theme==='dark'?20:16});
     for(const name of names){
       const controller=page(name);
-      const options={q:'run',id:name==='reader'?article:'starter',mode:name==='daily'?'listening':'flash',deck:'favorites'};
+      const options={q:'run',id:name==='reader'?article:name==='annotation'?annotation:'starter',article,start:0,end:35,mode:name==='daily'?'listening':'flash',deck:'favorites'};
       if(controller.onLoad)await controller.onLoad(options);
       if(controller.onShow)await controller.onShow();
       if(name==='entry')await controller.load('run');
@@ -64,6 +72,20 @@ function write(name, controller, width = 390, fileName = name) {
         for(const width of [320,390,768,1024]){
           const fileName=name+'-'+variant+'-'+theme+'-'+width;
           write(name,controller,width,fileName);manifest.push({name:name+'-'+variant,theme,width,file:fileName+'.html'});
+        }
+      }
+      if(name==='notebook'||name==='reader'||name==='annotation'){
+        const variants=name==='notebook'?['selecting','group-picker']:name==='reader'?['selection','popup']:['new'];
+        for(const variant of variants){
+          if(variant==='selecting'){controller.onToggleSelect();controller.onSelectPage();}
+          if(variant==='group-picker'){controller.setData({selecting:false,groupPicker:true,groupingWord:'run',groupingWords:[]});}
+          if(variant==='selection'){controller._selection={start:0,end:35};controller.setData({markMode:true});controller.renderTokens();}
+          if(variant==='popup'){controller.setData({markMode:false});await controller.openWord('Learning',0,8,{start:0,end:8});}
+          if(variant==='new')controller.setData({id:'',note:'',kind:'highlight'});
+          for(const width of [320,390,768,1024]){
+            const fileName=name+'-'+variant+'-'+theme+'-'+width;
+            write(name,controller,width,fileName);manifest.push({name:name+'-'+variant,theme,width,file:fileName+'.html'});
+          }
         }
       }
       if(controller.onUnload)controller.onUnload();

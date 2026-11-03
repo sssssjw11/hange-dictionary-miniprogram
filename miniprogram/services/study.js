@@ -5,8 +5,8 @@ const DAY = 86400000;
 function dayKey(now = Date.now()) { const date = new Date(now); return date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0'); }
 function state() { const data=records.read('study', { version: 1, decks: [], cards: {}, days: {}, events: [], plan: { dailyNew: 20, dailyReview: 100 }, pending: null });data.cards=Object.assign(Object.create(null),data.cards);return data; }
 function save(data) { records.write('study', data); }
-function decks() { const data = state(); return [{ id:'favorites', name:'我的生词本', count:store.favorites().length, system:true }, { id:'starter', name:'基础与语法 · 内置词表', count:Object.keys(offline.entries).length, system:true }].concat(data.decks.map(deck => ({id:deck.id,name:deck.name,count:deck.words.length,created:deck.created,system:false}))); }
-function words(deckId, data = state()) { if (deckId === 'favorites') return store.favorites().map(item => item.word); if (deckId === 'starter') return Object.keys(offline.entries); const deck = data.decks.find(item => item.id === deckId); if (!deck) throw new Error('词表不存在'); return deck.words; }
+function decks() { const data = state(); return [{ id:'favorites', name:'全部生词', count:store.favorites().length, system:true }, { id:'starter', name:'基础与语法 · 内置词表', count:Object.keys(offline.entries).length, system:true }].concat(store.groups().map(group=>({id:'book:'+group.id,name:group.name,count:group.count,system:true})),data.decks.map(deck => ({id:deck.id,name:deck.name,count:deck.words.length,created:deck.created,system:false}))); }
+function words(deckId, data = state()) { if (deckId === 'favorites') return store.favorites().map(item => item.word); if(deckId.startsWith('book:'))return store.favorites(deckId.slice(5)).map(item=>item.word);if (deckId === 'starter') return Object.keys(offline.entries); const deck = data.decks.find(item => item.id === deckId); if (!deck) throw new Error('词表不存在'); return deck.words; }
 function createDeck(name, text) {
   name = String(name).trim(); if (!name || name.length > 40) throw new Error('词表名称须为 1～40 字');
   const list = parseWords(String(text).replace(/^\uFEFF/,''));

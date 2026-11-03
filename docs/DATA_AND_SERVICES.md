@@ -28,6 +28,14 @@ output/                      # 离线分卷、测试报告、布局投影，全�
 
 中文反查基于中文释义、用法及例句找相应英文词条。它不是独立的汉英出版社词典，也不执行机器翻译。完整离线反查至少输入两个汉字，每次最多显示 40 项。服务器安装 `chinese.db` 后也可只依靠牛津数据库反查，不要求补充词库。
 
+## 分组、批注与备份
+
+生词本最多 30 个，单词可属于多个生词本，每次最多批量整理 500 词。删除分组仅移除归属，保留单词、笔记及全局复习进度。分组可直接选作复习或连续播放的词表；单组导出的 Android 兼容 JSON 为平面词条，完整结构由完整备份保存。
+
+阅读页可长按文字写批注，或依次点选起止位置进行跨页高亮；每次范围最多 6000 字符，每篇最多 1000 条标记。书签和批注目录可搜索并回到原文。批注保存在导入后的正文上，随本项目完整备份恢复，不写回源 PDF/EPUB 文件或原厂批注格式。
+
+完整备份导出为 v3，最大 14 MiB，覆盖六类各 2 MiB 的本地记录与生词本。仍可导入 v2 完整备份和旧 Android 生词本 JSON。合并同一材料的批注时要求正文一致；相同 ID 的当前笔记和阅读进度优先保留，新增标记补入。若正文不同、范围非法、分组引用丢失、空间不足或提交失败，则不替换已提交数据。
+
 ## OCR、语音与 PDF
 
 基础安装只需要 `server/requirements.txt`。完整可选服务可在自己的 Python 虚拟环境安装：
@@ -58,7 +66,9 @@ Windows 上模型所在目录如果含中文，服务先尝试短路径，再使
 
 Vosk 模型来自 [官方模型清单](https://alphacephei.com/vosk/models)；OCR 实现参考 [RapidOCR 官方项目](https://github.com/RapidAI/RapidOCR)。本仓库不附带权重。当前本地工作区已安装中英 Vosk 模型和可用 OCR，但这些依赖不随公开源码上传。
 
-连续播放位于“学习 → 单词连续播放”，支持顺序、循环、释义朗读和断点位置。音频结束后才推进；切换页面或进入后台暂停，不把播放计作完成复习。原生图片编辑/裁剪位于拍照页面，使用微信 [editImage](https://developers.weixin.qq.com/miniprogram/dev/api/media/image/wx.editImage.html) / [cropImage](https://developers.weixin.qq.com/miniprogram/dev/api/media/image/wx.cropImage.html)。客户端不支持接口时会显示错误，不上传未经用户确认识别的图片。\n\n## AI / 全文翻译：当前待配置
+连续播放位于“学习 → 单词连续播放”，支持顺序、循环、释义朗读和断点位置。音频结束后才推进；切换页面或进入后台暂停，不把播放计作完成复习。原生图片编辑/裁剪位于拍照页面，使用微信 [editImage](https://developers.weixin.qq.com/miniprogram/dev/api/media/image/wx.editImage.html) / [cropImage](https://developers.weixin.qq.com/miniprogram/dev/api/media/image/wx.cropImage.html)。客户端不支持接口时会显示错误，不上传未经用户确认识别的图片。
+
+## AI / 全文翻译：当前待配置
 
 客户端没有模型密钥输入框；密钥只放在配套服务的环境中。没有配置时 `/api/assistant` 返回明确的 HTTP 503，页面禁用发送，不提供预设“AI 答案”或假译文。
 

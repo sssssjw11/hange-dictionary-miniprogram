@@ -12,6 +12,7 @@ if (wxml.includes('Error:') || wxss.includes('Error:')) throw new Error('Native 
 fs.writeFileSync(path.join(output, 'wxml-compiled.js'), wxml);
 fs.writeFileSync(path.join(output, 'wxss-compiled.js'), wxss);
 new Function('global', wxml); new Function('global', wxss);
-const report = { compiler: 'miniprogram-compiler 0.2.3 (official wcc/wcsc wrapper)', native_wxml: 'passed', native_wxss: 'passed', template_count: JSON.parse(fs.readFileSync(path.join(source, 'app.json'), 'utf8')).pages.length, wechat_devtools_runtime: 'not covered by this compiler check; see docs/VERIFICATION.md', phone_runtime: 'not tested' };
+const appConfig=JSON.parse(fs.readFileSync(path.join(source,'app.json'),'utf8'));const pageCount=appConfig.pages.length,componentCount=Object.keys(appConfig.usingComponents||{}).length;
+const report = { compiler: 'miniprogram-compiler 0.2.3 (official wcc/wcsc wrapper)', native_wxml: 'passed', native_wxss: 'passed', page_count:pageCount,component_count:componentCount,template_count:pageCount+componentCount, wechat_devtools_runtime: 'not covered by this compiler check; see docs/VERIFICATION.md', phone_runtime: 'not tested' };
 fs.writeFileSync(path.join(output, 'compilation-verification.json'), JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));

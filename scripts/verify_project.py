@@ -37,6 +37,14 @@ def main():
         assert item['pagePath'] in app['pages']
         for key in ['iconPath', 'selectedIconPath']:
             assert (mini / item[key]).stat().st_size < 40000
+    for name,component in app.get('usingComponents',{}).items():
+        base=component.lstrip('/')
+        for extension in ['.js','.json','.wxml','.wxss']:
+            assert (mini/(base+extension)).is_file(), (name,extension)
+        assert json.loads((mini/(base+'.json')).read_text('utf-8')).get('component') is True
+        source=(mini/(base+'.js')).read_text('utf-8')
+        for event in re.findall(r'\b(?:bind|catch)(?:\w+|:[\w-]+)="(\w+)"',(mini/(base+'.wxml')).read_text('utf-8')):
+            assert re.search(r'\b'+event+r'\s*\(',source),(name,event)
     for path in mini.rglob('*.json'):
         json.loads(path.read_text('utf-8'))
     for path in list(mini.rglob('*.js')) + list((ROOT / 'scripts').glob('*.js')):

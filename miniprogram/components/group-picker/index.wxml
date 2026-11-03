@@ -1,0 +1,7 @@
+<view wx:if="{{visible}}" class="group-mask" bindtap="onCancel"></view>
+<view wx:if="{{visible}}" class="group-sheet {{theme}}">
+ <view class="row"><text class="section-title">归入生词本</text><button class="text-button" bindtap="onCancel">取消</button></view>
+ <view class="small muted group-caption">{{count > 1 ? '批量整理 ' + count + ' 个词，将使用下面勾选的归属。' : word}}<view>一个单词可属于多个生词本；不勾选则归为未分组，笔记保留。</view></view>
+ <scroll-view scroll-y="{{true}}" class="group-options"><checkbox-group bindchange="onChange"><label wx:for="{{choices}}" wx:key="id" class="group-choice"><checkbox value="{{item.id}}" checked="{{item.checked}}" color="#267fbb"/><view><text>{{item.name}}</text><text class="small muted"> · {{item.count}} 词</text></view></label></checkbox-group><view wx:if="{{!choices.length}}" class="empty">还没有独立生词本，先新建一个。</view></scroll-view>
+ <view class="actions"><button disabled="{{busy}}" bindtap="onCreate">新建生词本</button><button class="primary" loading="{{busy}}" disabled="{{busy || !count}}" bindtap="onSave">保存归属</button></view>
+</view>

@@ -6,7 +6,7 @@ const sentences = require('../../services/sentences');
 const study = require('../../services/study');
 const POS = { n: '名词', v: '动词', a: '形容词', r: '副词' };
 Page({
-  data: { loading: true, error: '', matches: [], entry: null, favorite: false, note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
+  data: { loading: true, error: '', matches: [], entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
   onLoad(options) { let query; try { query = decodeURIComponent(options.q || ''); } catch (_) { query = options.q || ''; } this._query = query; this.load(query); },
   onShow() { ui.apply(this); if (this._entry) this.refreshFavorite(); },
   async load(word) {
@@ -23,7 +23,7 @@ Page({
       this.refreshFavorite(); this.contentPage(0); wx.setNavigationBarTitle({ title: result.word });
     } catch (error) { if (this._generation === generation) this.setData({ loading: false, error: error.message }); }
   },
-  refreshFavorite() { try { const item = store.favorite(this._entry.word); this.setData({ favorite: !!item, note: item ? item.note : '', noteStatus: item && item.note ? '已保存到本机' : '' }); } catch (error) { ui.error(error); } },
+  refreshFavorite() { try { const item = store.favorite(this._entry.word); this.setData({ favorite: !!item,bookNames:item?store.groups().filter(group=>item.groups.includes(group.id)).map(group=>group.name).join(' / '):'',note: item ? item.note : '', noteStatus: item && item.note ? '已保存到本机' : '' }); } catch (error) { ui.error(error); } },
   contentPage(index) {
     const entry = this._entry; if (!entry) return;
     const oxford = this.data.source === 'oxford',examples=this.data.source==='examples'; const rows = oxford ? entry.oxford.blocks : examples?((entry.oxford||{}).examples||[]):(entry.senses || []); const size = oxford ? 4 : 8;
@@ -37,10 +37,13 @@ Page({
   onRetry() { dictionary.reset(); this.load(this._query); },
   async onFavorite() {
     if (!this._entry) return;
-    try { const item = store.favorite(this._entry.word); if (item && item.note && !await ui.confirm('移出生词本？', '这个词的本地笔记也会移除。')) return;
+    try { const item = store.favorite(this._entry.word); if (item && (item.note||item.groups.length) && !await ui.confirm('移出生词本？', '这个词的本地笔记和分组归属也会移除。')) return;
       store.toggle(this._entry.word, this._entry.brief || this._entry.zh || (this._entry.teaching || {}).title); this.refreshFavorite();
     } catch (error) { ui.error(error); }
   },
+  onGroups(){if(this._entry)this.setData({groupPicker:true,groupingMeaning:this._entry.brief||this._entry.zh||(this._entry.teaching||{}).title||''});},
+  onGroupClose(){this.setData({groupPicker:false});},
+  onGroupSaved(){const note=this.data.note,status=this.data.noteStatus;this.refreshFavorite();if(status==='尚未保存')this.setData({note,noteStatus:status});this.setData({groupPicker:false});},
   onNote(event) { this.setData({ note: event.detail.value, noteStatus: '尚未保存' }); },
   onSaveNote() { if (!this._entry) return; try { store.saveNote(this._entry.word, this._entry.brief || this._entry.zh || (this._entry.teaching || {}).title, this.data.note); this.setData({ favorite: true, noteStatus: '已保存到本机' }); wx.showToast({ title: '笔记已保存', icon: 'success' }); } catch (error) { ui.error(error); } },
   onCopy() { if (this._entry) wx.setClipboardData({ data: this._entry.word }); },

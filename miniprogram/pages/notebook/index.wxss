@@ -1,1 +1,2 @@
 .title .small{letter-spacing:0;margin-left:12rpx}.note-preview{white-space:pre-line;max-height:142rpx;overflow:hidden}
+.book-filter{margin-bottom:22rpx}.book-filter picker{flex:1;min-width:0}.book-filter .field{overflow-wrap:anywhere}.notebook-row+.notebook-row{border-top:1rpx solid var(--line)}.word-tools{padding:0 30rpx 22rpx;gap:16rpx}.word-tools text{min-width:0;overflow-wrap:anywhere}.word-tools button{flex:none}.select-word{display:flex;gap:18rpx;padding:26rpx 28rpx;align-items:center}.select-word view{min-width:0;flex:1}

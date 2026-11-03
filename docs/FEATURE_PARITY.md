@@ -6,7 +6,7 @@
 
 | 原应用功能族 / 参考活动 | 微信开发版行为 | 状态及限制 |
 | --- | --- | --- |
-| 主导航 `MainTabActivity` | 词典、AI、生词笔记、学习、我的五项原生 Tab，共 20 页 | 已实现；微信运行验收待完成 |
+| 主导航 `MainTabActivity` | 词典、AI、生词笔记、学习、我的五项原生 Tab，共 23 页 | 已实现；微信运行验收待完成 |
 | 英文、短语、中文、历史查词 `HistoryRecordActivity` | 完整正文分页、输入联想、词形跳转、中文反查、最近 100 条记录 | 已实现；中文反查每次最多 40 项 |
 | 本地词库安装 `InstallDictActivity` | 私有 MDX 转换、完整牛津分卷导入、逐文件 SHA-256 校验、移除 | 已实现牛津十版格式；未实现任意 MDD 媒体词典管理 |
 | 富文本释义 `HtmlViewActivity` | 原文自定义标签转为微信富文本；全部文字可分页访问，双语例句可收藏 | 整库文字保留核对通过；源脚本不执行 |
@@ -16,16 +16,16 @@
 | 语音输入 `SpeechSettingActivity` | 用户主动录制 WAV，本地 Vosk 中英识别，编辑后查词 | 中英链路已真实联调；微信真机录音未验收 |
 | AI 对话、讲解、写作 `AIChatActivity` / `AiChatAgentActivity` | 对话、词句讲解、写作批改、阅读摘要入口及本地会话 | 适配真实模型接口；按需求待配置，不生成伪回复 |
 | 全文 / AI 翻译 `WordTransActivity` / `AITranscribeEditActivity` | 完整文本翻译界面、目标语言、历史、达到模型上限的提示 | 待真实模型；未提供原应用付费离线翻译引擎或长音频转写 |
-| 生词、笔记 `DictNoteMngActivity` | 收藏、笔记、搜索、分页、导入导出 | 已实现；当前只有一个生词本，额外分类可用自定义词表 |
+| 生词、笔记 `DictNoteMngActivity` | 独立生词本、多重归属、500 词批量整理、笔记、分组检索与导入导出 | 已实现；最多 30 个生词本，分组可直接用于复习和播放 |
 | 多词表 `ReciteMultiBookActivity` / `ReciteWordListActivity` | 内置词表、生词本、自定义 TXT/CSV/TSV 词表、TXT 导出 | 已实现；每表最多 10,000 词、最多 30 个自定义词表 |
 | 复习、计划、统计 `ReciteSettingActivity` / `ReciteStatsActivity` | 间隔复习、每日计划、回忆、拼写、选义、断点继续、七天统计 | 已实现；使用本项目调度算法，不复刻原算法 |
 | 熟词 `ReciteMatureWordsActivity` | 熟词列表、重新学习 | 已实现 |
 | 单词播放 `WordCardPlayActivity` | 顺序/循环播放、朗读释义、间隔、暂停、前后切词和进度保存 | 本地连续播放已实现；切后台暂停，不包含原版播放皮肤与车机控制 |
-| 文章 / 电子书阅读 `BookListActivity` / Reader 入口 | TXT、EPUB、文本 PDF，分页点词、收藏、进度、段落例句 | 已实现本地正文阅读；没有云书城、视频、原版标注及 DRM 资源 |
+| 文章 / 电子书阅读 `BookListActivity` / Reader 入口 | TXT、EPUB、文本 PDF，分页点词、选段查词、高亮、批注、书签、进度、段落例句及原文定位 | 本地正文阅读和批注已实现；云书城、视频、原厂标注格式互通及 DRM 资源仍有缺口 |
 | 例句、原生笔记 | 双语例句卡片、个人笔记、搜索、编辑、复制、朗读 | 已实现本地替代功能 |
 | 每日一句、听力、知识圈 | 原创每日句、合成语音听力练习、原创用法知识 | 部分；不包含原应用在线节目、资讯、社区与评论 |
 | 考试 / 题库 `TiKuMainActivity` | 基于本地词表的拼写与选义练习 | 部分；没有原应用历年真题、模拟试卷或商业题库 |
-| 备份 / 同步 `OnlineSyncActivity` | 完整 JSON 备份、合并恢复，保留当前笔记和进度 | 本地备份已实现；按需求不提供账号云同步 |
+| 备份 / 同步 `OnlineSyncActivity` | v3 完整 JSON 备份、分组与批注合并恢复，保留当前笔记和进度 | 本地备份已实现；按需求不提供账号云同步 |
 | 账号、注册、支付 `RegActivity` / `WXPayEntryActivity` | 不包含 | 按用户要求移除；不需要应用账号 |
 | 广告、推送、评价引导、遥测 | 不包含 | 按本地开发版范围移除 |
 | 悬浮取词、锁屏背词、跨应用剪贴板监控 `LightpeekActivity` / `KeyGuardReciteActivity` | 使用小程序内点词、手动输入或粘贴 | Android 系统级行为无法在微信小程序中等价迁移 |
