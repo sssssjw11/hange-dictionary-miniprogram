@@ -60,8 +60,26 @@ test('Chinese reverse lookup ranks a direct definition ahead of an incidental ex
   const payload=JSON.stringify(Object.fromEntries(Object.entries(files).map(([name,body])=>[name,body.toString('base64')])));
   const result=spawnSync('python',['-c','import zipfile,base64,json,sys;z=zipfile.ZipFile(sys.argv[1],"w");[(z.writestr(name,base64.b64decode(body))) for name,body in json.loads(sys.argv[2]).items()];z.close()',zip,payload],{encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);
-  try{await pack.install([zip]);const found=await pack.lookup('人际关系');assert.deepEqual(found.matches.map(row=>row.word),['interpersonal','use']);}
+  try{await pack.install([zip]);const found=await pack.lookup('人际关系');assert.deepEqual(found.matches.map(row=>row.word),['interpersonal','use']);const single=await pack.lookup('人');assert.equal(single.matches.length,0);assert.match(single.hint,/新版词库/);}
   finally{await pack.remove();}
+});
+test('a generated pack searches single Han characters, case-insensitive mixed text and supplementary characters across all visible source text',async()=>{
+  const folder=path.join(temp,'search-builder');fs.mkdirSync(folder);
+  const source=path.join(folder,'source.db');
+  let result=spawnSync('python',[path.join(project,'tests/search_fixture.py'),source],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  result=spawnSync('python',[path.join(project,'scripts/build_offline_pack.py'),'--database',source,'--output',path.join(folder,'pack.zip')],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  const report=JSON.parse(fs.readFileSync(path.join(folder,'offline-pack-verification.json'),'utf8'));assert.equal(report.chineseSingleCharacter,true);
+  try{
+    const state=await pack.install(report.volumes.map(row=>path.join(folder,row.name)));assert.equal(state.singleCharacter,true);
+    assert.deepEqual((await pack.lookup('爱')).matches.map(row=>row.word),['love','beloved','aid','use']);
+    assert.deepEqual((await pack.lookup('C语言')).matches.map(row=>row.word),['compiler']);
+    const alias=await pack.lookup('loved');assert.equal(alias.word,'love');assert.equal(alias.matchedFrom,'loved');
+    assert.deepEqual((await pack.lookup('𠮷')).matches.map(row=>row.word),['rare']);
+    assert.deepEqual((await pack.lookup('𠮷野')).matches.map(row=>row.word),['rare']);
+    assert.deepEqual(new Set((await pack.lookup('键盘')).matches.map(row=>row.word)),new Set(['compiler','typing']));
+    const input=(await pack.lookup('输')).matches.find(row=>row.word==='input');assert.ok(input);assert.match(input.meaning,/原文匹配/);
+    assert.equal(await pack.lookup('秘'),null);
+  }finally{await pack.remove();}
 });
 test('real private pack: import all volumes, full native lookup, aliases, Chinese reverse lookup, and removal', async t => {
   const reportFile = path.join(output, 'offline-pack-verification.json');

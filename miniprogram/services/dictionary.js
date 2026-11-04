@@ -1,4 +1,5 @@
 const config = require('../config');
+const chineseSearch = require('../utils/chinese');
 const store = require('../utils/store');
 const cache = require('../utils/cache');
 const offline = require('../data/offline');
@@ -27,7 +28,7 @@ async function status(force) {
 function local(word) {
   const key = store.key(word), entry = offline.entries[key] || offline.entries[offline.aliases[key]];
   if (entry) return Object.assign({}, entry, { requested: word, source: 'builtin' });
-  if (/[\u3400-\u9fff]/.test(key)) {
+  if (chineseSearch.hasHan(key)) {
     const matches = Object.values(offline.entries).filter(row => (row.zh || '').includes(key) || (row.teaching && JSON.stringify(row.teaching).includes(key))).map(row => ({ word: row.word, meaning: row.zh || (row.teaching || {}).title || '' }));
     if (matches.length === 1) return Object.assign({}, offline.entries[store.key(matches[0].word)], { requested: word, matchedFrom: word, source: 'builtin' });
     if (matches.length) return { kind: 'matches', requested: word, matches: matches.slice(0, 40), partial: true };
@@ -58,7 +59,7 @@ async function lookup(word) {
   try { return await task; } finally { pending.delete(key); }
 }
 async function suggest(word) {
-  const key = store.key(word); if (!key || /[\u3400-\u9fff]/.test(key)) return [];
+  const key = store.key(word); if (!key || chineseSearch.hasHan(key)) return [];
   const installed=await offlinePack.status();if(installed.installed){const full=await offlinePack.suggest(word);if(full.length)return full;}
   const rows = Object.values(offline.entries).filter(x => store.key(x.word).startsWith(key)).sort((a, b) => a.word.length - b.word.length).slice(0, 10).map(x => ({ word: x.word, meaning: x.zh || (x.teaching || {}).title || '' }));
   if (health.ready && health.base === base()) { try { return (await request('suggest', { q: word }, 1800)).rows; } catch (_) {} }

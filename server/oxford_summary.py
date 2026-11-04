@@ -5,6 +5,16 @@ IGNORED = {'script', 'style', 'link', 'meta', 'base', 'iframe', 'object',
            'embed', 'img', 'audio', 'video', 'source', 'audio-wr'}
 
 
+def visible_soup(source):
+    soup = BeautifulSoup(source, 'html.parser')
+    for node in soup.select(','.join(sorted(IGNORED)) + ',.audio_play_button'):
+        node.decompose()
+    for node in soup.select('a[href]'):
+        if node.get('href', '').lower().startswith('sound:'):
+            node.decompose()
+    return soup
+
+
 def oxford_summary(source):
     soup = BeautifulSoup(source, 'html.parser') if isinstance(source, str) else source
     definitions, fallback = [], []

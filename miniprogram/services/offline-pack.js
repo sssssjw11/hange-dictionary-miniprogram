@@ -1,5 +1,6 @@
 const codec = require('../vendor/codec');
 const store = require('../utils/store');
+const chineseSearch = require('../utils/chinese');
 const POINTER = 'hange.oxford.pack.v1';
 const SAFE_NAME = /^(manifest\.json|NOTICE\.txt|lengths\.bin|keys\/[0-9a-f]{2}\.json|prefix\/[0-9a-f]{2}\.json|docs\/[0-9]{3}\.json|zh\/[0-9a-f]{2}\.z|parts\/[0-9]{3}\.bin)$/;
 let active = null, restoring = null, installing = false;
@@ -33,7 +34,7 @@ async function restore() {
   })();
   try { return await restoring; } finally { restoring = null; }
 }
-async function status() { try { const pack = await restore(); return pack ? { installed: true, title: pack.manifest.title, definitions: pack.manifest.definitionRecords, redirects: pack.manifest.redirectRecords, bytes: pack.manifest.extractedBytes, sourceSha256: pack.manifest.sourceSha256 } : { installed: false }; } catch (error) { return { installed: false, error: error.message }; } }
+async function status() { try { const pack = await restore(); return pack ? { installed: true, title: pack.manifest.title, definitions: pack.manifest.definitionRecords, redirects: pack.manifest.redirectRecords, bytes: pack.manifest.extractedBytes, sourceSha256: pack.manifest.sourceSha256, singleCharacter:pack.manifest.chineseSingleCharacter===true } : { installed: false }; } catch (error) { return { installed: false, error: error.message }; } }
 async function jsonFile(pack, name, compressed) {
   if (pack.json.has(name)) return pack.json.get(name);
   let value = await read(pack.root + '/' + name, compressed ? undefined : 'utf8');
@@ -45,36 +46,35 @@ async function metadata(pack, id) { const values = await jsonFile(pack, 'docs/' 
 async function document(pack, id) { const row = await metadata(pack, id); const file = 'parts/' + row[0].toString().padStart(3, '0') + '.bin'; const body = await chunk(pack.root + '/' + file, row[1], row[2]); return { word: row[3], html: codec.strFromU8(codec.unzlibSync(body)) }; }
 async function lookup(word) {
   const pack = await restore(); if (!pack) return null;
-  const key = store.key(word); if (/[\u3400-\u9fff]/.test(key)) return chinese(pack, key);
+  const key = store.key(word); if (chineseSearch.hasHan(key)) return chinese(pack, key);
   let ids = await references(pack, key);
   if (!ids.length && pack.manifest.compactIndex) ids = await references(pack, '\x01' + key.replace(/[^\p{L}\p{N}]/gu, ''));
   if (!ids.length) return null;
   const pages = []; for (const id of ids) pages.push(await document(pack, id));
   const rendered = codec.renderOxford(pages);
-  return { kind: 'entry', requested: word, word: pages[0].word, source: 'offline-pack', oxford: rendered, related: rendered.related, phonetics: rendered.phonetics, brief:rendered.brief };
+  return { kind: 'entry', requested: word, word: pages[0].word, matchedFrom:store.key(pages[0].word)!==key?word:'', source: 'offline-pack', oxford: rendered, related: rendered.related, phonetics: rendered.phonetics, brief:rendered.brief };
 }
 async function chinese(pack, term) {
-  const grams = []; const phrases = term.match(/[\u3400-\u9fff]+/g) || [];
-  phrases.forEach(phrase => { for (let i = 0; i < phrase.length - 1; i++) if (!grams.includes(phrase.slice(i, i+2))) grams.push(phrase.slice(i, i+2)); });
-  if (!grams.length) return {kind:'matches',requested:term,matches:[],hint:'离线中文反查请至少输入两个汉字'};
+  const grams = chineseSearch.queryTerms(term,pack.manifest.chineseSingleCharacter===true);
+  if (!grams.length) return {kind:'matches',requested:term,matches:[],hint:'当前离线索引不支持单字反查，请导入新版词库后重试'};
   let candidates = null;
   for (const gram of grams) { const file = 'zh/' + codec.hashBucket(gram).toString(16).padStart(2, '0') + '.z'; const values = await jsonFile(pack, file, true); const ids = codec.decodeDeltas(values[gram] || ''); if (candidates === null) candidates = ids; else { const set = new Set(ids); candidates = candidates.filter(id => set.has(id)); } if (!candidates.length) return null; }
   const lengths = pack.lengths || (pack.lengths = await read(pack.root + '/lengths.bin'));
   // Metadata is read in document order so each shard is opened only once here.
   const ranked=[];
-  for(const id of candidates){const row=await metadata(pack,id),brief=String(row[4]||'');ranked.push({id,row,rank:brief===term?0:brief.startsWith(term)?1:brief.includes(term)?2:3});}
+  for(const id of candidates){const row=await metadata(pack,id);ranked.push({id,row,rank:chineseSearch.meaningRank(row[4]||'',term)});}
   ranked.sort((a,b)=>a.rank-b.rank||lengths[a.id]-lengths[b.id]||a.id-b.id);
   const matches = [], seen = new Set();
   for (const {id,row} of ranked) {
     if (seen.has(store.key(row[3]))) continue;
     const page = await document(pack, id);
-    const text = codec.plainText(page.html);
-    if (text.includes(term)) { seen.add(store.key(row[3])); matches.push({ word: row[3], meaning: pack.manifest.summaryVersion>=2?row[4]:codec.oxfordSummary(page.html) }); }
+    const text = store.key(codec.plainText(page.html));
+    if (text.includes(term)) { seen.add(store.key(row[3])); matches.push({ word: row[3], meaning: (pack.manifest.summaryVersion>=2?row[4]:codec.oxfordSummary(page.html))||'原文匹配：'+term }); }
     if (matches.length >= 40) break;
   }
   return matches.length ? { kind: 'matches', requested: term, matches, source: 'offline-pack' } : null;
 }
-async function suggest(word){const pack=await restore(),key=store.key(word);if(!pack||!pack.manifest.prefixIndex||!key||/[\u3400-\u9fff]/.test(key))return [];const first=Array.from(key)[0],file='prefix/'+codec.hashBucket(first).toString(16).padStart(2,'0')+'.json';const items=(await jsonFile(pack,file))[first]||[],rows=[];for(const item of items){if(store.key(item[0]).startsWith(key)){const row=await metadata(pack,item[1]),meaning=pack.manifest.summaryVersion>=2?row[4]:codec.oxfordSummary((await document(pack,item[1])).html);rows.push({word:item[0],meaning});if(rows.length===10)break;}}return rows;}
+async function suggest(word){const pack=await restore(),key=store.key(word);if(!pack||!pack.manifest.prefixIndex||!key||chineseSearch.hasHan(key))return [];const first=Array.from(key)[0],file='prefix/'+codec.hashBucket(first).toString(16).padStart(2,'0')+'.json';const items=(await jsonFile(pack,file))[first]||[],rows=[];for(const item of items){if(store.key(item[0]).startsWith(key)){const row=await metadata(pack,item[1]),meaning=pack.manifest.summaryVersion>=2?row[4]:codec.oxfordSummary((await document(pack,item[1])).html);rows.push({word:item[0],meaning});if(rows.length===10)break;}}return rows;}
 async function zipEntries(path) {
   const size = await stat(path); if (size < 22 || size > 160*1024*1024) throw new Error('词库压缩分卷体积异常');
   const tailLength = Math.min(size, 65557), tail = await chunk(path, size - tailLength, tailLength); let end = -1;

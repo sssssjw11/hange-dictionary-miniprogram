@@ -9,18 +9,14 @@ import os
 from pathlib import Path
 import re
 import sqlite3
-import unicodedata
 from urllib.parse import unquote
 import zlib
 
 from bs4 import BeautifulSoup, Comment, NavigableString
-from oxford_summary import oxford_summary
+from oxford_summary import oxford_summary, visible_soup
+from text_index import normalize, has_han, query_terms, meaning_rank
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def normalize(value):
-    return ' '.join(unicodedata.normalize('NFC', value).replace('_', ' ').replace('’', "'").lower().split())
 
 
 def connect(path):
@@ -43,10 +39,14 @@ class Engine:
         self.oxford = self.folder / 'oxford/oxford.db'
         self.chinese_index = self.folder / 'oxford/chinese.db'
         self.oxford_chinese = False
+        self.oxford_single_character = False
         if self.chinese_index.is_file() and self.oxford.is_file():
             try:
                 with closing(connect(self.chinese_index)) as index, closing(connect(self.oxford)) as source:
-                    self.oxford_chinese = index.execute("SELECT value FROM metadata WHERE key='source_sha256'").fetchone() == source.execute("SELECT value FROM metadata WHERE key='source_sha256'").fetchone()
+                    metadata = dict(index.execute('SELECT key,value FROM metadata'))
+                    source_sha = source.execute("SELECT value FROM metadata WHERE key='source_sha256'").fetchone()
+                    self.oxford_chinese = bool(source_sha and metadata.get('source_sha256') == source_sha[0])
+                    self.oxford_single_character = self.oxford_chinese and metadata.get('single_character') == '1'
             except sqlite3.Error:
                 self.oxford_chinese = False
         self.teaching = json.loads((ROOT / 'miniprogram/data/learning.json').read_text('utf-8'))
@@ -60,7 +60,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'version': '2.2.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.3.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -94,7 +94,7 @@ class Engine:
 
     def suggest(self, word):
         key = normalize(word)
-        if not key or len(key) > 128 or re.search('[\u3400-\u9fff]', key):
+        if not key or len(key) > 128 or has_han(key):
             return []
         result, seen = [], set()
         with (closing(connect(self.base)) if self.base.is_file() else nullcontext(None)) as db:
@@ -115,22 +115,25 @@ class Engine:
         return result
 
     def chinese(self, term):
-        result = [{'word': word, 'meaning': note['title']} for word, note in self.teaching.items()
-                  if len(term) >= 2 and term in json.dumps(note, ensure_ascii=False)]
-        seen = {row['word'] for row in result}
-        if self.oxford_chinese and len(term)>=2:
-            grams=set()
-            for phrase in re.findall('[\u3400-\u9fff]+',term):grams.update(phrase[offset:offset+2] for offset in range(len(phrase)-1))
+        term = normalize(term)
+        result, seen = [], set()
+        if self.oxford_chinese:
+            grams=query_terms(term, self.oxford_single_character)
             if grams:
                 query=' AND '.join('"'+gram+'"' for gram in sorted(grams))
                 with closing(connect(self.chinese_index)) as index,closing(connect(self.oxford)) as source:
-                    rows=index.execute('SELECT d.id,d.word,d.brief FROM search JOIN documents d ON d.id=search.rowid WHERE search MATCH ? ORDER BY CASE WHEN d.brief=? THEN 0 WHEN instr(d.brief,?)=1 THEN 1 WHEN instr(d.brief,?)>0 THEN 2 ELSE 3 END,d.length,length(d.word),d.word',(query,term,term,term))
+                    index.create_function('hange_rank', 2, meaning_rank, deterministic=True)
+                    rows=index.execute('SELECT d.id,d.word,d.brief FROM search JOIN documents d ON d.id=search.rowid WHERE search MATCH ? ORDER BY hange_rank(d.brief,?),length(d.word),d.id',(query,term))
                     for identifier,word,brief in rows:
                         if word in seen:continue
                         body=source.execute('SELECT body FROM entries WHERE id=?',(identifier,)).fetchone()[0]
-                        text=BeautifulSoup(zlib.decompress(body).decode(),'html.parser').get_text()
-                        if term in text:seen.add(word);result.append({'word':word,'meaning':brief})
+                        text=normalize(visible_soup(zlib.decompress(body).decode()).get_text())
+                        if term in text:seen.add(word);result.append({'word':word,'meaning':brief or '原文匹配：'+term})
                         if len(result)>=40:break
+        for word,note in self.teaching.items():
+            if len(result)>=40:break
+            if word not in seen and term in normalize(json.dumps(note,ensure_ascii=False)):
+                seen.add(word);result.append({'word':word,'meaning':note['title']})
         if not self.base.is_file():
             return result[:40]
         escaped = term.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
@@ -163,14 +166,16 @@ class Engine:
             row = (key, '', self.teaching[key]['title'], '', '', '')
         pages = self._oxford(key)
         if not row and not pages:
-            if re.search('[\u3400-\u9fff]', key):
+            if has_han(key):
                 matches = self.chinese(key)
                 if len(matches) == 1:
                     data = dict(self.lookup(matches[0]['word']))
                     return dict(data, requested=requested, matchedFrom=requested)
                 return {'kind': 'matches', 'requested': requested, 'matches': matches}
             return {'kind': 'missing', 'requested': requested, 'suggestions': self.suggest(key)}
-        data = dict(zip(['word', 'phonetic', 'zh', 'en', 'formsRaw', 'tagsRaw'], row)) if row else {'word': key}
+        if not row and pages:
+            matched = normalize(pages[0][1])
+        data = dict(zip(['word', 'phonetic', 'zh', 'en', 'formsRaw', 'tagsRaw'], row)) if row else {'word': pages[0][1]}
         data.update(kind='entry', schema=1, requested=requested, source='service', senses=json.loads(senses[0]) if senses else [])
         if matched != key:
             data['matchedFrom'] = requested

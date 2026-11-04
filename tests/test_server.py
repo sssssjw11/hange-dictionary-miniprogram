@@ -26,6 +26,25 @@ def node_text(nodes):
 
 
 class RendererTest(unittest.TestCase):
+    def test_character_mixed_case_and_supplementary_queries_use_the_imported_source(self):
+        sys.path.insert(0,str(ROOT/'scripts'))
+        from build_chinese_index import build
+        from search_fixture import build_source
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary);(folder/'oxford').mkdir();source=folder/'oxford/oxford.db'
+            build_source(source);build(source,folder/'oxford/chinese.db');engine=Engine(folder)
+            self.assertTrue(engine.status()['oxfordChineseSingleCharacter'])
+            self.assertEqual([row['word'] for row in engine.chinese('爱')],['love','beloved','aid','use'])
+            self.assertEqual(engine.lookup('C语言')['word'],'compiler')
+            alias=engine.lookup('loved')
+            self.assertEqual(alias['word'],'love')
+            self.assertEqual(alias['matchedFrom'],'loved')
+            self.assertEqual(engine.lookup('𠮷')['word'],'rare')
+            self.assertEqual(engine.lookup('𠮷野')['word'],'rare')
+            self.assertEqual({row['word'] for row in engine.chinese('键盘')},{'compiler','typing'})
+            self.assertIn('原文匹配',next(row for row in engine.chinese('输') if row['word']=='input')['meaning'])
+            self.assertEqual(engine.lookup('秘')['matches'],[])
+
     def test_oxford_only_full_chinese_index(self):
         sys.path.insert(0,str(ROOT/'scripts'))
         from build_chinese_index import build
@@ -78,7 +97,7 @@ class LocalDictionaryTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.engine = Engine()
-        if not cls.engine.base.is_file() or not cls.engine.oxford.is_file():
+        if not cls.engine.oxford.is_file():
             raise unittest.SkipTest('Private dictionary data not installed; renderer tests still run.')
 
     def test_all_chinese_senses_preserved_in_long_entries(self):

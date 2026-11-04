@@ -7,10 +7,8 @@ from array import array
 from collections import defaultdict
 from contextlib import closing
 import hashlib
-import html
 import json
 from pathlib import Path
-import re
 import sqlite3
 import struct
 import sys
@@ -20,7 +18,8 @@ import zlib
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'server'))
 from dictionary import normalize
-from oxford_summary import oxford_summary
+from oxford_summary import oxford_summary, visible_soup
+from text_index import index_terms
 
 PART_SIZE = 48 * 1024 * 1024
 
@@ -81,15 +80,12 @@ def main():
                     part = (stage / ('parts/%03d.bin' % part_number)).open('wb')
                 part.write(body)
                 text = zlib.decompress(body).decode('utf-8')
-                translations = [html.unescape(re.sub('<[^>]*>', '', item)) for item in re.findall(r'<chn\b[^>]*>([\s\S]*?)</chn>', text, re.I)]
-                brief = oxford_summary(text)
+                soup = visible_soup(text)
+                brief = oxford_summary(soup)
                 doc_meta[document] = [part_number, part_size, len(body), word, brief]
                 lengths.append(min(len(word), 255))
                 part_size += len(body)
-                grams = set()
-                for translation in translations:
-                    for phrase in re.findall('[\u3400-\u9fff]+', translation):
-                        grams.update(phrase[index:index+2] for index in range(len(phrase)-1))
+                grams = index_terms(soup.get_text())
                 for gram in grams:
                     postings[gram].append(document)
             source_docs[identifier] = document
@@ -162,7 +158,7 @@ def main():
     for index, values in enumerate(zh):
         content = json.dumps(values, ensure_ascii=False, separators=(',', ':')).encode()
         (stage / ('zh/%02x.z' % index)).write_bytes(zlib.compress(content, 9))
-    (stage / 'NOTICE.txt').write_text('Source: user-provided local MDX. Dictionary text remains the property of its original rightsholders. No audio or image resources were supplied. This private pack is excluded from the public repository.\n', 'utf-8')
+    (stage / 'NOTICE.txt').write_text('Source: user-provided local MDX. Dictionary text remains the property of its original rightsholders. This text pack contains no original entry recordings or illustrations. This private pack is excluded from the public repository.\n', 'utf-8')
     files = {}
     for file in sorted(stage.rglob('*')):
         if file.is_file() and file.name != 'manifest.json':
@@ -172,7 +168,7 @@ def main():
     total = sum(value['bytes'] for value in files.values())
     if total > 180*1024*1024:
         raise ValueError('Extracted pack exceeds the reserved 180 MiB user-file budget: ' + str(total))
-    manifest = {'format': 'hange-oxford-pack', 'version': 1, 'title': '牛津高阶英汉双解 · 第10版', 'edition': metadata.get('edition', ''), 'sourceSha256': metadata.get('source_sha256', ''), 'definitionRecords': source_count, 'redirectRecords': aliases, 'uniqueDocuments': len(doc_meta), 'lookupKeys': len(resolved), 'compactIndex': True, 'prefixIndex':True, 'summaryVersion':2, 'buckets': 256, 'documentShardSize': 512, 'chineseBigrams': len(postings), 'extractedBytes': total, 'files': files}
+    manifest = {'format': 'hange-oxford-pack', 'version': 1, 'title': '牛津高阶英汉双解 · 第10版', 'edition': metadata.get('edition', ''), 'sourceSha256': metadata.get('source_sha256', ''), 'definitionRecords': source_count, 'redirectRecords': aliases, 'uniqueDocuments': len(doc_meta), 'lookupKeys': len(resolved), 'compactIndex': True, 'prefixIndex':True, 'summaryVersion':2, 'chineseSingleCharacter':True, 'buckets': 256, 'documentShardSize': 512, 'chineseBigrams': sum(len(gram)>1 for gram in postings), 'chineseCharacters': sum(len(gram)==1 for gram in postings), 'extractedBytes': total, 'files': files}
     (stage / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, separators=(',', ':')), 'utf-8')
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
