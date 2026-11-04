@@ -5,14 +5,17 @@ const media = require('../../services/media');
 const sentences = require('../../services/sentences');
 const study = require('../../services/study');
 const POS = { n: '名词', v: '动词', a: '形容词', r: '副词' };
+function entryView(result){
+  return {word:result.word,phonetic:result.phonetic||'',phonetics:result.phonetics||(result.oxford||{}).phonetics||{},zh:result.zh||'',en:result.en||'',forms:result.forms||[],matchedFrom:result.matchedFrom||'',sourceLabel:result.source==='offline-pack'?'牛津十版 · 全量离线':result.source==='cache'?'已缓存 · 可离线重看':result.source==='builtin'?'内置离线词条':'全量词库',hasOxford:!!((result.oxford||{}).blocks||[]).length,hasTeaching:!!result.teaching,hasBase:!!(result.zh||result.en),hasExamples:!!((result.oxford||{}).examples||[]).length,hasSenses:!!(result.senses||[]).length};
+}
 Page({
-  data: { loading: true, error: '', matches: [], matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], relatedTotal:0, relatedPage:0, relatedPages:1, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
+  data: { loading: true, error: '', matches: [], matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], relatedTotal:0, relatedPage:0, relatedPages:1, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
   onLoad(options) { let query; try { query = decodeURIComponent(options.q || ''); } catch (_) { query = options.q || ''; } this._query = query; this.load(query); },
   onShow() { ui.apply(this); if (this._entry) this.refreshFavorite(); },
   async load(word) {
     const generation = (this._generation || 0) + 1; this._generation = generation; this._query = word;
     this._entry = null; this._matchCursors=[0]; this._matchTarget=null;
-    this.setData({ loading: true, error: '', matches: [], entry: null, matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'' });
+    this.setData({ loading: true, error: '', matches: [], entry: null, matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'',supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'' });
     try {
       const result = await dictionary.lookup(word); if (this._generation !== generation) return;
       if (result.kind !== 'entry') {
@@ -23,10 +26,22 @@ Page({
       this._entry = result;
       const meaning = result.brief || result.zh || (result.teaching || {}).title || '';
       try { store.visit(result.word, meaning); } catch (error) { ui.error(error); }
-      const hasOxford = !!(result.oxford && result.oxford.blocks.length), hasTeaching = !!result.teaching;
-      this.setData({ loading: false, entry: { word: result.word, phonetic: result.phonetic || '', phonetics:result.phonetics||(result.oxford||{}).phonetics||{}, zh: result.zh || '', en: result.en || '', forms: result.forms || [], matchedFrom: result.matchedFrom || '', sourceLabel: result.source === 'offline-pack'?'牛津十版 · 全量离线':result.source === 'cache' ? '已缓存 · 可离线重看' : result.source === 'builtin' ? '内置离线词条' : '全量词库', hasOxford, hasTeaching, hasBase:!!(result.zh||result.en), hasExamples:!!((result.oxford||{}).examples||[]).length, hasSenses: !!(result.senses || []).length }, teaching: result.teaching || null, source: hasOxford ? 'oxford' : hasTeaching ? 'teaching' : (result.senses||[]).length?'wordnet':'base' });
+      const view=entryView(result);
+      this.setData({loading:false,entry:view,teaching:result.teaching||null,source:view.hasOxford?'oxford':view.hasTeaching?'teaching':view.hasSenses?'wordnet':'base',supplementState:result.supplementState||'',supplementNote:result.supplementState==='cache'?'补充词典已缓存，可离线查阅':'简释 · 英语分义 · 用法说明'});
       this.refreshFavorite(); this.contentPage(0); this.relatedPage(0); wx.setNavigationBarTitle({ title: result.word });
     } catch (error) { if (this._generation === generation) this.setData({ loading: false, error: error.message }); }
+  },
+  async onMoreDictionaries(){
+    if(!this._entry||this.data.supplementLoading)return;
+    const generation=this._generation;this.setData({supplementLoading:true,supplementError:''});
+    try{
+      const extra=await dictionary.supplement(this._entry.word,{refresh:true});
+      if(this._generation!==generation)return;
+      this._entry=dictionary.mergeSupplement(this._entry,extra);
+      this.setData({entry:entryView(this._entry),teaching:this._entry.teaching||null,supplementState:this._entry.supplementState||'',supplementError:extra.refreshError||'',supplementNote:extra.found?(extra.source==='cache'?'补充词典已缓存，可离线查阅':'补充词典已读取'):extra.available?'补充词典暂未收录此词':'该服务尚未安装补充词库'});
+      this.contentPage(this.data.page);this.relatedPage(this.data.relatedPage);
+    }catch(error){if(this._generation===generation)this.setData({supplementError:error.message});}
+    finally{if(this._generation===generation)this.setData({supplementLoading:false});}
   },
   refreshFavorite() { try { const item = store.favorite(this._entry.word); this.setData({ favorite: !!item,bookNames:item?store.groups().filter(group=>item.groups.includes(group.id)).map(group=>group.name).join(' / '):'',note: item ? item.note : '', noteStatus: item && item.note ? '已保存到本机' : '' }); } catch (error) { ui.error(error); } },
   contentPage(index) {

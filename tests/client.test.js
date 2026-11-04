@@ -84,6 +84,58 @@ test('cache quota eviction and clearing never delete learning records', () => {
   assert.equal(cache.get('word0'), null); assert.ok(cache.get('word8')); cache.clear();
   assert.equal(store.favorite('run').note, 'note'); assert.equal(memory.has('hange.cache.index'), false);
 });
+
+test('supplement cache shares the quota without colliding with full words or deleting learning records',()=>{
+  store.saveNote('run','跑','keep');cache.put('supplement:demo',{kind:'entry',word:'full-word'});
+  cache.putSupplement('DEMO',{kind:'supplement',word:'demo',found:true,zh:'原创补充'});
+  assert.equal(cache.get('supplement:demo').word,'full-word');assert.equal(cache.getSupplement('demo').zh,'原创补充');
+  for(let index=0;index<35;index++)cache.putSupplement('word-'+index,{kind:'supplement',word:'word-'+index});
+  assert.equal(cache.getSupplement('word-0'),null);assert.ok(cache.getSupplement('word-34'));cache.clear();
+  assert.equal(cache.getSupplement('word-34'),null);assert.equal(store.favorite('run').note,'keep');
+});
+
+test('cached supplements enrich an installed entry offline without changing Oxford, its headword or its input alias',async()=>{
+  const pack=require('../miniprogram/services/offline-pack'),status=pack.status,lookup=pack.lookup;
+  const oxford={blocks:[{id:'original',nodes:[{type:'text',text:'Original full body'}]}]};
+  try{
+    store.saveSettings({online:false});pack.status=async()=>({installed:true});
+    pack.lookup=async word=>({kind:'entry',word:word==='running'?'running':'fresh',requested:word,matchedFrom:'original input',source:'offline-pack',oxford,related:['original-link']});
+    cache.putSupplement('fresh',{kind:'supplement',word:'fresh',found:true,zh:'原创补充',senses:[{definition:'Original sense'}]});
+    const result=await dictionary.lookup('fresh');assert.equal(result.oxford,oxford);assert.equal(result.word,'fresh');assert.equal(result.matchedFrom,'original input');assert.equal(result.source,'offline-pack');assert.equal(result.supplementState,'cache');assert.equal(result.zh,'原创补充');
+    const independent=await dictionary.lookup('running');assert.equal(independent.word,'running');assert.deepEqual(independent.senses||[],[],'the builtin run alias must not attach verb senses to the independent running headword');assert.equal(requestCalls,0);
+    assert.equal((await dictionary.supplement('fresh',{refresh:true})).source,'cache');
+  }finally{pack.status=status;pack.lookup=lookup;}
+});
+
+test('supplements are requested separately, retain honest cached fallbacks and reject another headword',async()=>{
+  const request=wx.request;const payload={kind:'supplement',word:'demo',found:true,available:true,source:'service',zh:'原创补充',senses:[],forms:[]};let calls=0;
+  try{
+    store.saveSettings({online:true,apiBase:'http://localhost:18759'});
+    wx.request=o=>{calls++;assert.ok(o.url.endsWith('/api/supplement'));o.success({statusCode:200,data:payload});};
+    assert.equal((await dictionary.supplement('demo')).zh,'原创补充');assert.equal(calls,1);
+    store.saveSettings({online:false});assert.equal((await dictionary.supplement('demo')).source,'cache');assert.equal(calls,1);
+    store.saveSettings({online:true});wx.request=o=>o.fail({errMsg:'original unavailable service'});
+    const cached=await dictionary.supplement('demo',{refresh:true});assert.equal(cached.source,'cache');assert.ok(cached.refreshError);
+    wx.request=o=>o.success({statusCode:200,data:payload});await assert.rejects(dictionary.supplement('other'),/相同词头/);assert.equal(cache.getSupplement('other'),null);
+  }finally{wx.request=request;}
+});
+
+test('more dictionaries preserves the Oxford page and unsaved note, ignores double clicks and discards stale responses',async()=>{
+  const lookup=dictionary.lookup,supplement=dictionary.supplement;let release,calls=0;
+  const blocks=Array.from({length:8},(_,index)=>({id:String(index),nodes:[{type:'text',text:'Original '+index}]}));
+  dictionary.lookup=async word=>({kind:'entry',word,source:'offline-pack',oxford:{blocks},related:['original-link']});
+  dictionary.supplement=()=>{calls++;return new Promise(resolve=>{release=resolve;});};
+  const extra={kind:'supplement',word:'demo',found:true,available:true,source:'service',zh:'原创补充',senses:[{pos:'v',definition:'Original sense',examples:[],synonyms:[],antonyms:[]}],related:['extra-link']};
+  try{
+    const entry=page('entry');await entry.load('demo');entry.contentPage(1);entry.onNote({detail:{value:'Uncommitted note'}});
+    const reading=entry.onMoreDictionaries();await entry.onMoreDictionaries();assert.equal(calls,1);assert.equal(entry.data.page,1);
+    release(extra);await reading;assert.equal(entry.data.page,1);assert.equal(entry.data.source,'oxford');assert.deepEqual(entry.data.oxfordBlocks.map(row=>row.id),['4','5','6','7']);assert.equal(entry.data.note,'Uncommitted note');assert.equal(entry.data.noteStatus,'尚未保存');assert.equal(store.favorite('demo'),null);assert.ok(entry.data.entry.hasSenses);
+    entry.onSource({currentTarget:{dataset:{source:'wordnet'}}});assert.equal(entry.data.senses[0].definition,'Original sense');
+    dictionary.supplement=async()=>{throw new Error('original service failure');};await entry.onMoreDictionaries();assert.match(entry.data.supplementError,/service failure/);assert.equal(entry.data.senses.length,1);
+    dictionary.supplement=()=>new Promise(resolve=>{release=resolve;});const stale=entry.onMoreDictionaries();await entry.load('fresh');release(extra);await stale;
+    assert.equal(entry.data.entry.word,'fresh');assert.equal(entry.data.entry.hasSenses,false);assert.equal(entry.data.supplementLoading,false);
+  }finally{dictionary.lookup=lookup;dictionary.supplement=supplement;}
+});
 test('storage failure reports unsaved notes instead of pretending success', () => {
   const original = wx.setStorageSync; wx.setStorageSync = () => { throw new Error('storage full'); };
   try { assert.throws(() => store.saveNote('run', '跑', 'note'), /storage full/); } finally { wx.setStorageSync = original; }
@@ -113,4 +165,11 @@ test('an installed pack miss probes a configured service after cold start and ca
     const result=await dictionary.lookup('supplement-only');assert.equal(result.word,'supplement-only');assert.deepEqual(paths,['/api/health','/api/lookup']);
     store.saveSettings({online:false});assert.equal((await dictionary.lookup('supplement-only')).source,'cache');assert.equal(paths.length,2);
   }finally{pack.status=status;pack.lookup=lookup;wx.request=request;}
+});
+
+test('real local supplemental dictionaries return WordNet and base meanings without retransmitting the Oxford body',async t=>{
+  const api=process.env.HANGE_TEST_API;if(!api){t.skip('set HANGE_TEST_API for installed supplemental dictionaries');return;}
+  store.saveSettings({online:true,apiBase:api});const extra=await dictionary.supplement('meticulous');
+  assert.equal(extra.kind,'supplement');assert.equal(extra.word,'meticulous');assert.equal(extra.found,true);assert.equal(extra.available,true);assert.ok(extra.zh);assert.ok(extra.senses.length>0);assert.equal('oxford' in extra,false);
+  const calls=requestCalls;store.saveSettings({online:false});const cached=await dictionary.supplement('meticulous');assert.equal(cached.source,'cache');assert.deepEqual(cached.senses,extra.senses);assert.equal(requestCalls,calls);
 });

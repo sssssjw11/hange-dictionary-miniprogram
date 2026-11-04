@@ -28,6 +28,28 @@ def node_text(nodes):
 
 
 class RendererTest(unittest.TestCase):
+    def test_supplement_endpoint_returns_canonical_metadata_without_the_oxford_body(self):
+        from search_fixture import build_source
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary);(folder/'oxford').mkdir();build_source(folder/'oxford/oxford.db')
+            with closing(sqlite3.connect(folder/'dictionary.db')) as db:
+                db.executescript('CREATE TABLE entries(key TEXT,word TEXT,phonetic TEXT,zh TEXT,en TEXT,forms TEXT,tags TEXT); CREATE TABLE aliases(key TEXT,lemma TEXT); CREATE TABLE senses(key TEXT,json TEXT);')
+                db.execute('INSERT INTO entries VALUES (?,?,?,?,?,?,?)',('love','love','lʌv','原创释义','Original meaning','3:loves','original'))
+                db.execute('INSERT INTO senses VALUES (?,?)',('love',json.dumps([{'pos':'v','definition':'Original sense','examples':[],'synonyms':[],'antonyms':[]}])));db.commit()
+            engine=Engine(folder);extra=engine.supplement('loved')
+            self.assertEqual((extra['kind'],extra['word'],extra['phonetic']),('supplement','love','lʌv'))
+            self.assertTrue(extra['available']);self.assertTrue(extra['found']);self.assertNotIn('oxford',extra)
+            self.assertEqual(extra['forms'][0]['word'],'loves');self.assertEqual(extra['senses'][0]['definition'],'Original sense')
+            self.assertFalse(engine.supplement('qzxunknownword')['found'])
+            previous=Handler.engine;Handler.engine=engine;server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
+            thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+            try:
+                base='http://127.0.0.1:'+str(server.server_port)
+                self.assertEqual(json.load(urlopen(base+'/api/supplement?q=loved')),extra)
+                with self.assertRaises(HTTPError) as caught:urlopen(base+'/api/supplement?q=')
+                self.assertEqual(caught.exception.code,400);caught.exception.close()
+            finally:server.shutdown();server.server_close();thread.join();Handler.engine=previous
+
     def test_reverse_pages_reach_all_words_and_deduplicate_across_supplemental_sources(self):
         sys.path.insert(0,str(ROOT/'scripts'))
         from build_chinese_index import build

@@ -84,10 +84,13 @@ function write(name, controller, width = 390, fileName = name) {
       }
       if(name==='entry'){
         const original=JSON.parse(JSON.stringify(controller.data));
-        for(const variant of ['matches','matches-last','matches-error','related']){
+        for(const variant of ['matches','matches-last','matches-error','related','supplement-loading','supplement-error','supplement-wordnet']){
           controller.setData(original);
           if(variant==='related'){
             controller._entry.related=Array.from({length:75},(_,index)=>'original related expression '+index);controller.relatedPage(3);
+          }else if(variant.startsWith('supplement-')){
+            controller.setData({supplementLoading:variant==='supplement-loading',supplementError:variant==='supplement-error'?'未连接到补充词库，牛津正文仍可离线查阅，请稍后重试。':'',supplementState:variant==='supplement-wordnet'?'cache':'',supplementNote:variant==='supplement-wordnet'?'补充词典已缓存，可离线查阅':'简释 · 英语分义 · 用法说明'});
+            if(variant==='supplement-wordnet'){controller.setData({source:'wordnet'});controller.contentPage(0);}
           }else{
             controller.setData({entry:null,loading:false,error:'',matchQuery:'中文检索',matchPage:variant==='matches-last'?3:1,matchNextCursor:variant==='matches-last'?null:80,matchLoading:false,matchError:variant==='matches-error'?'读取暂时失败，请重试翻页。':'',matches:Array.from({length:variant==='matches-last'?4:40},(_,index)=>({word:'original expression '+index,meaning:'原创排版示例，包含中文释义和 English explanation，以检查长内容换行。'}))});
           }

@@ -63,7 +63,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.4.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.5.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -183,6 +183,15 @@ class Engine:
 
     def chinese(self, term):
         return self.chinese_page(term)['matches']
+
+    @lru_cache(maxsize=128)
+    def supplement(self, requested):
+        entry=self.lookup(requested)
+        fields={key:entry.get(key,default) for key,default in [('word',requested),('phonetic',''),('zh',''),('en',''),('forms',[]),('tags',[]),('senses',[]),('teaching',None)]}
+        fields.update(kind='supplement',schema=1,requested=requested,source='service',available=self.base.is_file(),
+                      found=bool(fields['zh'] or fields['en'] or fields['senses'] or fields['teaching'] or fields['forms'] or fields['phonetic']),
+                      related=(fields['teaching'] or {}).get('related',[]))
+        return fields
 
     @lru_cache(maxsize=128)
     def lookup(self, requested):

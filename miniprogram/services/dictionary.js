@@ -43,10 +43,20 @@ async function lookup(word) {
     const installed = await offlinePack.status();
     if (installed.installed) {
       const packed = await offlinePack.lookup(word);
-      if (packed) { if (packed.kind !== 'entry') return packed; const supplement = local(packed.word) || local(word) || {}; return Object.assign({}, supplement, packed, { teaching: supplement.teaching || null, senses: supplement.senses || [], related: Array.from(new Set((packed.related || []).concat(supplement.related || []))) }); }
+      if (packed) {
+        if(packed.kind!=='entry')return packed;
+        const builtin=local(packed.word)||local(word)||{};
+        let result=mergeSupplement(packed,builtin);
+        const cached=cache.getSupplement(packed.word);
+        if(cached&&store.key(cached.word)===store.key(packed.word))result=mergeSupplement(result,Object.assign({},cached,{source:'cache'}));
+        return result;
+      }
     }
     if (stored && stored.kind === 'entry') return Object.assign({}, stored, { source: 'cache', requested: word });
-    const fallback = local(word), state = await status(false,true);
+    let fallback=local(word);
+    const extra=cache.getSupplement(word);
+    if(extra&&extra.kind==='supplement'&&store.key(extra.word)===key)fallback=mergeSupplement(fallback||{kind:'entry',word:extra.word,requested:word,source:'cache',oxford:{blocks:[]}},Object.assign({},extra,{source:'cache'}));
+    const state = await status(false,true);
     if (state.ready) {
       try { const entry = await request('lookup', { q: word }); if (entry.kind === 'entry') cache.put(key, entry); return entry; }
       catch (error) { if (!fallback) throw error; }
@@ -77,4 +87,28 @@ async function matchPage(word,cursor,source){
   if(source==='service')return request('reverse',{q:word,cursor});
   throw new Error('当前服务不支持继续翻页，请重新查询或更新服务');
 }
-module.exports = { lookup, matchPage, suggest, status, offlineCount: Object.keys(offline.entries).length, reset() { health.checked = 0; } };
+function mergeSupplement(entry,extra){
+  const result=Object.assign({},entry);
+  if(extra.word&&store.key(extra.word)!==store.key(entry.word))return result;
+  for(const key of ['zh','en','phonetic','teaching'])if(extra[key])result[key]=extra[key];
+  for(const key of ['senses','forms','tags'])if(Array.isArray(extra[key])&&extra[key].length)result[key]=extra[key];
+  result.related=Array.from(new Set((entry.related||[]).concat(extra.related||[])));
+  if(extra.kind==='supplement'&&extra.found)result.supplementState=extra.source==='cache'?'cache':'service';
+  return result;
+}
+async function supplement(word,options={}){
+  word=String(word||'').trim();if(!word||word.length>256)throw new Error('请输入 1～256 字的单词或短语');
+  const stored=cache.getSupplement(word),cached=stored&&stored.kind==='supplement'&&store.key(stored.word)===store.key(word)?stored:null;
+  if(cached&&(!options.refresh||!base()))return Object.assign({},cached,{source:'cache'});
+  if(!base())throw new Error('请先连接本地词库服务，再读取补充释义；牛津仍可离线查阅。');
+  try{
+    const result=await request('supplement',{q:word});
+    if(!result||result.kind!=='supplement'||typeof result.word!=='string'||typeof result.found!=='boolean'||typeof result.available!=='boolean'||store.key(result.word)!==store.key(word))throw new Error('补充词典未匹配到相同词头，请更新服务后重试。');
+    if(result.found)cache.putSupplement(word,result);
+    return result;
+  }catch(error){
+    if(cached)return Object.assign({},cached,{source:'cache',refreshError:error.message});
+    throw error;
+  }
+}
+module.exports = { lookup, matchPage, supplement, mergeSupplement, suggest, status, offlineCount: Object.keys(offline.entries).length, reset() { health.checked = 0; } };
