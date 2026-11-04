@@ -72,13 +72,14 @@ test('100-item history and clear preserve the learning notebook', () => {
 
 test('native contents and cross-entry references focus the exact source offset while retaining same-headword drafts',async()=>{
   const lookup=dictionary.lookup,codec=require('../miniprogram/vendor/codec');
-  const html='<div class="entry" id="entry"><h1 class="headword">demo</h1><span class="unbox" id="duplicate"><span class="box_title">Extra Examples</span>FIRST</span><span class="unbox" id="duplicate"><span class="box_title">Word Origin</span>SECOND</span><li class="sense" id="second" sensenum="2"><deft><chn>第二义项</chn></deft></li><a href="entry://alias#second">demo (2)</a><a href="entry://other#absent">other</a></div>';
+  const html='<div class="entry" id="entry"><h1 class="headword">demo</h1><span class="pos">noun</span><a href="#duplicate">Idioms</a><span class="unbox" id="duplicate"><span class="box_title">Extra Examples</span>FIRST</span><span class="unbox" id="duplicate"><span class="box_title">Word Origin</span>SECOND</span><li class="sense" id="second" sensenum="2"><deft><chn>第二义项</chn></deft></li><a href="entry://alias#second">demo (2)</a><a href="entry://other#absent">other</a></div><div class="entry"><span class="headword">demo</span><span class="pos">verb</span><a href="#verb-jump">Idioms</a><span id="verb-jump">VERB</span></div>';
   dictionary.lookup=async word=>({kind:'entry',word:word==='other'?'other':'demo',matchedFrom:word==='alias'?'alias':'',source:'offline-pack',oxford:codec.renderOxford([{word,html}]),related:[]});
   const text=nodes=>nodes.map(node=>node.type==='text'?node.text:text(node.children||[])).join('');
   try{
     const entry=page('entry');await entry.load('demo');entry.onNote({detail:{value:'Retain this unsaved draft'}});
     const original=entry._entry.oxford.blocks.map(block=>text(block.nodes)).join('');
     await entry.onContents();assert.equal(entry.data.contentsOpen,true);
+    assert.deepEqual(entry.data.localJumpRows.map(row=>row.displayLabel),['Idioms · noun','Idioms · verb']);entry.onLocalJump({currentTarget:{dataset:{index:1}}});assert.ok(text(entry._focus.blocks[entry._focus.index].nodes).startsWith('VERB'));
     const index=entry._entry.oxford.contents.findIndex(row=>row.label==='Word Origin');entry.onContentsItem({currentTarget:{dataset:{index}}});
     assert.equal(entry.data.contentsOpen,false);assert.equal(entry.data.focusLabel,'Word Origin');assert.ok(text(entry._focus.blocks[entry._focus.index].nodes).startsWith('Word OriginSECOND'));
     assert.equal(entry._focus.blocks.map(block=>text(block.nodes)).join(''),original);assert.equal(entry.data.noteStatus,'尚未保存');
