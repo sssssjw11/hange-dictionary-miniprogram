@@ -18,15 +18,19 @@ ENTRIES = [
 ]
 
 
-def build_source(path):
+def build_source(path, extra_rows=0):
     with closing(sqlite3.connect(path)) as db:
         db.executescript('CREATE TABLE metadata(key TEXT,value TEXT); CREATE TABLE entries(id INTEGER PRIMARY KEY,key TEXT,compact TEXT,word TEXT,body BLOB,target TEXT);')
         db.executemany('INSERT INTO metadata VALUES (?,?)', [('source_sha256', hashlib.sha256(b'Original search examples').hexdigest()), ('edition', 'original-test')])
         for identifier, (word, html) in enumerate(ENTRIES):
             db.execute('INSERT INTO entries VALUES (?,?,?,?,?,NULL)', (identifier, word, word, word, zlib.compress(html.encode('utf-8'))))
         db.execute('INSERT INTO entries VALUES (8,?,?,?,?,?)', ('loved', 'loved', 'loved', None, 'love'))
+        for index in range(extra_rows):
+            word='indexed-%05d'%index
+            html='<deft><chn>索引检索测试</chn></deft><custom>'+word+'</custom>'
+            db.execute('INSERT INTO entries VALUES (?,?,?,?,?,NULL)', (9+index,word,word.replace('-',''),word,zlib.compress(html.encode('utf-8'))))
         db.commit()
 
 
 if __name__ == '__main__':
-    build_source(Path(sys.argv[1]))
+    build_source(Path(sys.argv[1]), int(sys.argv[2]) if len(sys.argv)>2 else 0)

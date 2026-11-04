@@ -10,9 +10,10 @@ const output = path.join(project, 'output');
 fs.mkdirSync(output, { recursive: true });
 const temp = fs.mkdtempSync(path.join(output, 'pack-test-'));
 const memory = new Map();
+let activeReads=0,peakReads=0;const readCounts=new Map();
 function safe(target) { const resolved = path.resolve(target); assert.ok(resolved === temp || resolved.startsWith(temp + path.sep)); return resolved; }
 const mock = {
-  readFile(o) { fs.readFile(o.filePath, o.encoding || null, (error, data) => error ? o.fail({ errMsg: error.message }) : o.success({ data: o.encoding ? data : data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) })); },
+  readFile(o) { activeReads++;peakReads=Math.max(peakReads,activeReads);readCounts.set(o.filePath,(readCounts.get(o.filePath)||0)+1);fs.readFile(o.filePath,o.encoding||null,(error,data)=>{activeReads--;if(error)o.fail({errMsg:error.message});else o.success({data:o.encoding?data:data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)});}); },
   stat(o) { fs.stat(o.path, (error, stats) => error ? o.fail({ errMsg: error.message }) : o.success({ stats })); },
   readdir(o){fs.readdir(safe(o.dirPath),(error,files)=>error?o.fail({errMsg:error.message}):o.success({files}));},
   open(o) { fs.open(o.filePath, o.flag, (error, fd) => error ? o.fail({ errMsg: error.message }) : o.success({ fd: String(fd) })); },
@@ -79,6 +80,21 @@ test('a generated pack searches single Han characters, case-insensitive mixed te
     assert.deepEqual(new Set((await pack.lookup('键盘')).matches.map(row=>row.word)),new Set(['compiler','typing']));
     const input=(await pack.lookup('输')).matches.find(row=>row.word==='input');assert.ok(input);assert.match(input.meaning,/原文匹配/);
     assert.equal(await pack.lookup('秘'),null);
+  }finally{await pack.remove();}
+});
+test('large reverse searches batch metadata with bounded concurrency and share the same in-flight files',async()=>{
+  const folder=path.join(temp,'many-shards');fs.mkdirSync(folder);const source=path.join(folder,'source.db');
+  let result=spawnSync('python',[path.join(project,'tests/search_fixture.py'),source,'4609'],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  result=spawnSync('python',[path.join(project,'scripts/build_offline_pack.py'),'--database',source,'--output',path.join(folder,'pack.zip')],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  const report=JSON.parse(fs.readFileSync(path.join(folder,'offline-pack-verification.json'),'utf8'));
+  try{
+    await pack.install(report.volumes.map(row=>path.join(folder,row.name)));peakReads=0;readCounts.clear();
+    const found=await Promise.all([pack.lookup('测'),pack.lookup('试')]);
+    for(const value of found){assert.equal(value.matches.length,40);assert.equal(value.matches[0].word,'indexed-00000');assert.equal(value.matches[39].word,'indexed-00039');}
+    assert.ok(peakReads>1&&peakReads<=8,'metadata read concurrency '+peakReads);
+    const metadata=Array.from(readCounts).filter(([name])=>/[\\/]docs[\\/]/.test(name));
+    assert.equal(metadata.length,10);assert.ok(metadata.every(([,count])=>count===1),'metadata files should not be read twice while in flight');
+    assert.equal(Array.from(readCounts).find(([name])=>name.endsWith('lengths.bin'))[1],1);
   }finally{await pack.remove();}
 });
 test('real private pack: import all volumes, full native lookup, aliases, Chinese reverse lookup, and removal', async t => {
