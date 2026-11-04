@@ -52,7 +52,11 @@ node scripts/verify_offline_corpus.js
 
 ## 微信客户端仍待验收
 
-本机取得腾讯有效签名的稳定版开发工具 2.02.2609240；旧 CLI 提示服务端口关闭。进一步通过官方新版 skill CLI 0.3.11 请求连接，返回 `taskType: auth / status: pending / Waiting for user authorization`，需要用户在工具内手动处理。目前尚未进入自动化模拟器。没有自动改变安全设置或完成用户授权。当前也没有可用于真机预览的 AppID，未上传、未发布。
+本机取得腾讯有效签名的稳定版开发工具 2.02.2609240。本次继续后查询原连接授权任务，已返回 `status: success / authorized: true / authorization_success`；不再处于等待 MCP 客户端授权的状态。官方新版 skill CLI 0.3.11 可读取工具状态，版本一致，但返回 `loginExpired: true`。
+
+使用当前公开占位配置 `touristappid` 调用 `open_project_window`，返回 `APPID_ERROR`，原文“不存在此 AppID 请检查后重新输入”。CLI 登录请求返回 `pending / Login window displayed`，随后查询该任务返回 `Task not found`；此返回不计作登录成功，未重复创建该任务。已打开实际主界面并观察到扫码页及“游客模式”入口，登录或进入游客模式仍由用户手动完成。目前尚未进入模拟器，也没有可用于真机预览的 AppID，未上传、未发布。详见 [开发工具与运行验收](WECHAT_DEVTOOLS.md)。
+
+另用官方旧版 `cli.bat open --project ...` 核对备用入口：已连接授权后开启的本地服务，但开窗同样返回 code 10、AppID 不存在。未更改安全配置，未替换成其他项目 AppID，也未把失败重试计作运行验收。
 
 需要在当前微信客户端实际验证：
 
