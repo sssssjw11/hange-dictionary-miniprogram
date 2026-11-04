@@ -19,6 +19,7 @@ Page({
  onInput(event){this._selected.clear();this.setData({query:event.detail.value,selectedCount:0});this.refresh();},
  onBook(event){const book=this.data.books[Number(event.detail.value)];if(book){this._selected.clear();this.setData({book:book.id,query:'',selectedCount:0,selecting:false});this.refresh();}},
  onManage(){wx.navigateTo({url:'/pages/groups/index'});},
+ onLookup(){wx.switchTab({url:'/pages/search/index'});},
  onWord(event){ui.open(ui.dataset(event));},
  onToggleSelect(){this._selected.clear();this.setData({selecting:!this.data.selecting,selectedCount:0});this.refresh(this.data.listPage);},
  onSelection(event){const next=new Set(this._selected);for(const item of this.data.rows)next.delete(item.word);for(const word of event.detail.value)if(this.data.rows.some(item=>item.word===word))next.add(word);if(next.size>500){ui.error(new Error('每次最多批量整理 500 词'));this.refresh(this.data.listPage);return;}this._selected=next;this.refresh(this.data.listPage);},

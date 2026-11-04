@@ -60,18 +60,21 @@ async function chinese(pack, term) {
   let candidates = null;
   for (const gram of grams) { const file = 'zh/' + codec.hashBucket(gram).toString(16).padStart(2, '0') + '.z'; const values = await jsonFile(pack, file, true); const ids = codec.decodeDeltas(values[gram] || ''); if (candidates === null) candidates = ids; else { const set = new Set(ids); candidates = candidates.filter(id => set.has(id)); } if (!candidates.length) return null; }
   const lengths = pack.lengths || (pack.lengths = await read(pack.root + '/lengths.bin'));
-  candidates.sort((a, b) => lengths[a] - lengths[b] || a - b);
+  // Metadata is read in document order so each shard is opened only once here.
+  const ranked=[];
+  for(const id of candidates){const row=await metadata(pack,id),brief=String(row[4]||'');ranked.push({id,row,rank:brief===term?0:brief.startsWith(term)?1:brief.includes(term)?2:3});}
+  ranked.sort((a,b)=>a.rank-b.rank||lengths[a.id]-lengths[b.id]||a.id-b.id);
   const matches = [], seen = new Set();
-  for (const id of candidates) {
-    const row = await metadata(pack, id); if (seen.has(store.key(row[3]))) continue;
+  for (const {id,row} of ranked) {
+    if (seen.has(store.key(row[3]))) continue;
     const page = await document(pack, id);
     const text = codec.plainText(page.html);
-    if (text.includes(term)) { seen.add(store.key(row[3])); matches.push({ word: row[3], meaning: row[4] }); }
+    if (text.includes(term)) { seen.add(store.key(row[3])); matches.push({ word: row[3], meaning: pack.manifest.summaryVersion>=2?row[4]:codec.oxfordSummary(page.html) }); }
     if (matches.length >= 40) break;
   }
   return matches.length ? { kind: 'matches', requested: term, matches, source: 'offline-pack' } : null;
 }
-async function suggest(word){const pack=await restore(),key=store.key(word);if(!pack||!pack.manifest.prefixIndex||!key||/[\u3400-\u9fff]/.test(key))return [];const first=Array.from(key)[0],file='prefix/'+codec.hashBucket(first).toString(16).padStart(2,'0')+'.json';const items=(await jsonFile(pack,file))[first]||[],rows=[];for(const item of items){if(store.key(item[0]).startsWith(key)){const row=await metadata(pack,item[1]);rows.push({word:item[0],meaning:row[4]});if(rows.length===10)break;}}return rows;}
+async function suggest(word){const pack=await restore(),key=store.key(word);if(!pack||!pack.manifest.prefixIndex||!key||/[\u3400-\u9fff]/.test(key))return [];const first=Array.from(key)[0],file='prefix/'+codec.hashBucket(first).toString(16).padStart(2,'0')+'.json';const items=(await jsonFile(pack,file))[first]||[],rows=[];for(const item of items){if(store.key(item[0]).startsWith(key)){const row=await metadata(pack,item[1]),meaning=pack.manifest.summaryVersion>=2?row[4]:codec.oxfordSummary((await document(pack,item[1])).html);rows.push({word:item[0],meaning});if(rows.length===10)break;}}return rows;}
 async function zipEntries(path) {
   const size = await stat(path); if (size < 22 || size > 160*1024*1024) throw new Error('词库压缩分卷体积异常');
   const tailLength = Math.min(size, 65557), tail = await chunk(path, size - tailLength, tailLength); let end = -1;

@@ -14,7 +14,7 @@ Page({
     this._entry = null; this.setData({ loading: true, error: '', matches: [], entry: null });
     try {
       const result = await dictionary.lookup(word); if (this._generation !== generation) return;
-      if (result.kind !== 'entry') { this._entry = null; this.setData({ loading: false, matches: result.matches || result.suggestions || [], partial: !!result.partial, error:result.hint || (result.kind === 'matches' ? (result.matches.length ? '' : '没有匹配的中文释义，请换个关键词再试。') : '本地词库暂未匹配到，可调整拼写或查询原形。'), matchQuery: word }); return; }
+      if (result.kind !== 'entry') { if(result.kind==='matches'&&(result.matches||[]).length)try{store.visit(word,'找到 '+result.matches.length+' 个相关词条');}catch(error){ui.error(error);}this._entry = null; this.setData({ loading: false, matches: result.matches || result.suggestions || [], partial: !!result.partial, error:result.hint || (result.kind === 'matches' ? (result.matches.length ? '' : '没有匹配的中文释义，请换个关键词再试。') : '本地词库暂未匹配到，可调整拼写或查询原形。'), matchQuery: word }); return; }
       this._entry = result;
       const meaning = result.brief || result.zh || (result.teaching || {}).title || '';
       try { store.visit(result.word, meaning); } catch (error) { ui.error(error); }

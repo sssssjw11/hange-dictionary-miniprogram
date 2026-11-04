@@ -20,6 +20,7 @@ import zlib
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'server'))
 from dictionary import normalize
+from oxford_summary import oxford_summary
 
 PART_SIZE = 48 * 1024 * 1024
 
@@ -81,7 +82,7 @@ def main():
                 part.write(body)
                 text = zlib.decompress(body).decode('utf-8')
                 translations = [html.unescape(re.sub('<[^>]*>', '', item)) for item in re.findall(r'<chn\b[^>]*>([\s\S]*?)</chn>', text, re.I)]
-                brief = next((value.strip() for value in translations if value.strip()), '')[:240]
+                brief = oxford_summary(text)
                 doc_meta[document] = [part_number, part_size, len(body), word, brief]
                 lengths.append(min(len(word), 255))
                 part_size += len(body)
@@ -171,7 +172,7 @@ def main():
     total = sum(value['bytes'] for value in files.values())
     if total > 180*1024*1024:
         raise ValueError('Extracted pack exceeds the reserved 180 MiB user-file budget: ' + str(total))
-    manifest = {'format': 'hange-oxford-pack', 'version': 1, 'title': '牛津高阶英汉双解 · 第10版', 'edition': metadata.get('edition', ''), 'sourceSha256': metadata.get('source_sha256', ''), 'definitionRecords': source_count, 'redirectRecords': aliases, 'uniqueDocuments': len(doc_meta), 'lookupKeys': len(resolved), 'compactIndex': True, 'prefixIndex':True, 'buckets': 256, 'documentShardSize': 512, 'chineseBigrams': len(postings), 'extractedBytes': total, 'files': files}
+    manifest = {'format': 'hange-oxford-pack', 'version': 1, 'title': '牛津高阶英汉双解 · 第10版', 'edition': metadata.get('edition', ''), 'sourceSha256': metadata.get('source_sha256', ''), 'definitionRecords': source_count, 'redirectRecords': aliases, 'uniqueDocuments': len(doc_meta), 'lookupKeys': len(resolved), 'compactIndex': True, 'prefixIndex':True, 'summaryVersion':2, 'buckets': 256, 'documentShardSize': 512, 'chineseBigrams': len(postings), 'extractedBytes': total, 'files': files}
     (stage / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, separators=(',', ':')), 'utf-8')
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:

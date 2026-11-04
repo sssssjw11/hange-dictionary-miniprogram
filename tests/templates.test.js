@@ -6,9 +6,22 @@ global.window = global;
 const compile = new Function('global', wxmlToJs(path.resolve(__dirname, '../miniprogram')))({});
 function text(node) { return typeof node === 'string' ? node : (node.children || []).map(text).join(''); }
 function nodes(node) { return typeof node === 'string' ? [] : [node, ...(node.children || []).flatMap(nodes)]; }
+
+test('native daily data preserves every original learning topic without requiring JSON at runtime',()=>{
+  const fs=require('node:fs');
+  const original=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../miniprogram/data/learning.json'),'utf8'));
+  assert.deepEqual(require('../miniprogram/data/learning'),original);
+  assert.equal(Object.keys(original).length,32);
+});
+
+test('the floating navigation renders all destinations and disappears while typing',()=>{
+  const data={items:require('../miniprogram/data/tabs'),selected:0,theme:'light',keyboard:false};
+  assert.equal(nodes(compile('custom-tab-bar/index.wxml')(data)).filter(node=>node.tag==='wx-button').length,5);
+  assert.equal(nodes(compile('custom-tab-bar/index.wxml')(Object.assign({},data,{keyboard:true}))).filter(node=>node.tag==='wx-button').length,0);
+});
 test('official WXML renderer resolves search data and repeated shortcuts', () => {
   const result = compile('pages/search/index.wxml')({ theme: 'light', offlineCount: 97, recent: [], suggestions: [], shortcuts: ['predicative', 'run'] });
-  assert.ok(text(result).includes('97')); assert.ok(text(result).includes('predicative'));
+  assert.ok(text(result).includes('导入牛津')); assert.ok(text(result).includes('predicative'));
   assert.equal(nodes(result).filter(x => x.attr && x.attr.bindtap === 'onWord').length, 2);
 });
 test('native entry template selects Oxford nodes and teaching content correctly', () => {

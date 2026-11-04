@@ -1,13 +1,22 @@
-<view class="page {{theme}}">
-  <view class="brand-row"><view class="brand"><text class="brand-mark">词</text><text>涵词典</text><text class="edition">MINI</text></view><button class="text-button" bindtap="onSettings" aria-label="阅读设置">阅读设置</button></view>
-  <view class="search-wrap"><image class="search-icon" src="/assets/search-on.png"/><input class="search-input" value="{{query}}" placeholder="查英文单词、短语或中文释义" placeholder-class="muted" confirm-type="search" maxlength="256" bindinput="onInput" bindconfirm="onSearch"/><button wx:if="{{query}}" class="clear" bindtap="onClear" aria-label="清空搜索">×</button><button class="primary search-button" bindtap="onSearch">查词</button></view>
-  <view class="connection"><text class="status-dot"></text><text>{{hasOffline ? '牛津十版 · 全量离线' : ready ? (oxford ? '牛津十版 + 双解补充' : '补充词库服务已连接') : '内置示例与查词缓存可离线查阅'}}</text><text class="local-label">免登录</text></view>
-  <view wx:if="{{suggestions.length}}" class="card suggest-list"><button wx:for="{{suggestions}}" wx:key="word" class="word-row" data-word="{{item.word}}" bindtap="onWord"><text class="word">{{item.word}}</text><text class="meaning">{{item.meaning}}</text></button></view>
-  <view class="quick-tools"><button bindtap="onCapture"><text>拍照 / 语音</text><text class="small muted">识别后查词</text></button><button bindtap="onTranslate"><text>全文翻译</text><text class="small muted">中英双向</text></button><button bindtap="onLibrary"><text>阅读书架</text><text class="small muted">点词查义</text></button></view>
-  <view class="daily-tabs"><button data-mode="sentence" bindtap="onDaily">每日一句</button><button data-mode="listening" bindtap="onDaily">听力练习</button><button bindtap="onKnowledge">用法知识</button></view>
-  <view class="hero"><text class="eyebrow">让每个意思都读完整</text><view class="title">查词，也把用法查清楚。</view><view class="subtitle">牛津双解 · 例句与搭配 · 原生学习工具</view><view class="chips hero-chips"><button wx:for="{{shortcuts}}" wx:key="*this" class="chip" data-word="{{item}}" bindtap="onWord">{{item}}</button></view></view>
-  <view class="section-head"><text class="section-title">最近查过</text><button class="text-button" bindtap="onHistory">查看全部</button></view>
-  <view class="card"><button wx:for="{{recent}}" wx:key="word" class="word-row" data-word="{{item.word}}" bindtap="onWord"><text class="word">{{item.word}}</text><text class="meaning">{{item.meaning}}</text></button><view wx:if="{{!recent.length}}" class="empty">输入一个单词，开始查词。<view class="small">生词、笔记与学习进度只存本机。</view></view></view>
-  <view class="capabilities"><view><text class="metric">{{hasOffline ? offlineDefinitions : offlineCount}}</text><text class="small muted">{{hasOffline ? '牛津离线正文' : '内置开源或原创示例'}}</text></view><button class="text-button" bindtap="onDictionaries">{{hasOffline ? '管理词库' : '导入完整牛津词库'}}</button></view>
-  <view class="footer">导入牛津离线包后，完整查词与中文反查不依赖网络。拍照、语音和 AI 等功能按各自服务的实际配置启用。</view>
+<view class="page tab-page search-page {{theme}}">
+  <view class="search-row">
+    <button class="icon-button menu-button" bindtap="onMenu" aria-label="打开功能菜单"><image src="/assets/menu-on.png"/></button>
+    <view class="search-box">
+      <input class="search-input" value="{{query}}" placeholder="查询单词或短语" placeholder-class="search-placeholder" confirm-type="search" maxlength="256" bindinput="onInput" bindconfirm="onSearch"/>
+      <button wx:if="{{query}}" class="clear-button" bindtap="onClear" aria-label="清空搜索">×</button>
+      <button wx:else class="icon-button voice-button" bindtap="onVoice" aria-label="语音查词"><image src="/assets/mic-on.png"/></button>
+    </view>
+    <button class="icon-button camera-button" bindtap="onCapture" aria-label="拍照识词"><image src="/assets/camera-on.png"/></button>
+  </view>
+  <view wx:if="{{!hasOffline}}" class="dictionary-status"><view class="status-copy"><view class="status-dot {{hasOffline ? 'ready' : ''}}"></view><text>{{hasOffline ? '牛津高阶 · 第10版 · 离线可查' : '常用示例 · 支持中文释义反查'}}</text></view><button class="text-button" bindtap="onDictionaries">{{hasOffline ? '词库' : '导入牛津'}}<text class="tiny-chevron">›</text></button></view>
+  <view wx:if="{{query}}" class="suggestions">
+    <button class="query-action search-button" bindtap="onSearch"><image src="/assets/search-on.png"/><text>查询“{{query}}”</text><text class="suggest-chevron">›</text></button>
+    <button wx:for="{{suggestions}}" wx:key="word" class="suggestion-row" data-word="{{item.word}}" bindtap="onWord"><view class="history-copy"><text class="history-word">{{item.word}}</text><text class="history-meaning">{{item.meaning}}</text></view><image class="suggest-arrow" src="/assets/chevron.png"/></button>
+  </view>
+  <view wx:else>
+    <view class="discovery-tabs"><button class="topic-tab {{discovery === 'sentence' ? 'active' : ''}}" data-tab="sentence" bindtap="onDiscovery">每日一句<view wx:if="{{discovery === 'sentence'}}" class="tab-underline"></view></button><button class="topic-tab {{discovery === 'listening' ? 'active' : ''}}" data-tab="listening" bindtap="onDiscovery">每日听力<view wx:if="{{discovery === 'listening'}}" class="tab-underline"></view></button><button class="topic-tab {{discovery === 'knowledge' ? 'active' : ''}}" data-tab="knowledge" bindtap="onDiscovery">用法知识<view wx:if="{{discovery === 'knowledge'}}" class="tab-underline"></view></button></view>
+    <view class="history-list"><button wx:for="{{recent}}" wx:key="word" class="history-item" data-word="{{item.word}}" bindtap="onWord"><image class="history-clock" src="/assets/history.png"/><view class="history-copy"><text class="history-word">{{item.word}}</text><text wx:if="{{item.meaning}}" class="history-meaning">{{item.meaning}}</text></view><text wx:if="{{item.hits > 1}}" class="history-hits">已查 {{item.hits}} 次</text></button></view>
+    <button wx:if="{{recent.length}}" class="more-history" bindtap="onHistory">查看全部查词记录 <text>›</text></button>
+    <view wx:if="{{!recent.length}}" class="search-empty"><image src="/assets/search.png"/><text class="empty-title">从一个词开始</text><text class="empty-description">查过的词会留在这里，方便下次再见。</text><view class="starter-words"><button wx:for="{{shortcuts}}" wx:key="*this" data-word="{{item}}" bindtap="onWord">{{item}} <text>↗</text></button></view></view>
+  </view>
 </view>

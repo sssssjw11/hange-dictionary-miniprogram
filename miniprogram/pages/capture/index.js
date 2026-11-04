@@ -2,7 +2,8 @@ const api=require('../../services/api');
 const media=require('../../services/media');
 const ui=require('../../utils/ui');
 Page({
- data:{theme:'light',busy:false,recording:false,seconds:0,text:'',imagePath:'',language:'en',caps:null,message:'',error:'',tokens:[]},
+ data:{theme:'light',preferred:'photo',busy:false,recording:false,seconds:0,text:'',imagePath:'',language:'en',caps:null,message:'',error:'',tokens:[]},
+ onLoad(options={}){this.setData({preferred:options.mode==='voice'?'voice':'photo'});},
  onShow(){ui.apply(this);this._closed=false;this._visible=true;if(!this._nativeMedia)this._generation=(this._generation||0)+1;const token=this._generation;if(!this._nativeMedia)this.setData({busy:false,recording:false});media.available(true).then(caps=>{if(this.current(token))this.setData({caps});}).catch(error=>{if(this.current(token))this.setData({error:error.message});});},
  current(token){return !this._closed&&token===this._generation;},
  onInput(event){this.setData({text:event.detail.value});this.tokens();},
@@ -10,7 +11,7 @@ Page({
  onLanguage(event){this.setData({language:ui.dataset(event,'language')});},
  async onPhoto(){
   if(this.data.busy||this.data.recording)return;const token=this._generation;
-  this._nativeMedia=true;this.setData({busy:true,error:'',message:'选择需要识别的图片'});
+  this._nativeMedia=true;this.setData({preferred:'photo',busy:true,error:'',message:'选择需要识别的图片'});
   try{
    const result=await new Promise((resolve,reject)=>wx.chooseMedia({count:1,mediaType:['image'],sourceType:['album','camera'],sizeType:['compressed'],success:resolve,fail:reject}));
    if(!this.current(token))return;const file=result.tempFiles[0];if(file.size>8*1024*1024)throw new Error('图片最大为 8 MiB，请压缩后再试');
@@ -44,7 +45,7 @@ Page({
  },
  async onRecord(){
   if(this.data.recording){media.stopRecord();return;}if(this.data.busy)return;
-  const token=this._generation;let timer;this.setData({busy:true,error:'',message:'准备录音…'});
+  const token=this._generation;let timer;this.setData({preferred:'voice',busy:true,error:'',message:'准备录音…'});
   try{
    const result=await media.startRecord(()=>{
     if(!this.current(token)){media.stopRecord(true);return;}

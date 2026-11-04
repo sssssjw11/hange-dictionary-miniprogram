@@ -14,6 +14,7 @@ from urllib.parse import unquote
 import zlib
 
 from bs4 import BeautifulSoup, Comment, NavigableString
+from oxford_summary import oxford_summary
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -59,7 +60,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'version': '2.1.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'version': '2.2.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -123,7 +124,7 @@ class Engine:
             if grams:
                 query=' AND '.join('"'+gram+'"' for gram in sorted(grams))
                 with closing(connect(self.chinese_index)) as index,closing(connect(self.oxford)) as source:
-                    rows=index.execute('SELECT d.id,d.word,d.brief FROM search JOIN documents d ON d.id=search.rowid WHERE search MATCH ? ORDER BY CASE WHEN d.brief=? THEN 0 WHEN d.brief LIKE ? THEN 1 ELSE 2 END,d.length,length(d.word),d.word',(query,term,term+'%'))
+                    rows=index.execute('SELECT d.id,d.word,d.brief FROM search JOIN documents d ON d.id=search.rowid WHERE search MATCH ? ORDER BY CASE WHEN d.brief=? THEN 0 WHEN instr(d.brief,?)=1 THEN 1 WHEN instr(d.brief,?)>0 THEN 2 ELSE 3 END,d.length,length(d.word),d.word',(query,term,term,term))
                     for identifier,word,brief in rows:
                         if word in seen:continue
                         body=source.execute('SELECT body FROM entries WHERE id=?',(identifier,)).fetchone()[0]
@@ -218,13 +219,21 @@ def rich_blocks(html, with_info=False):
     allowed = {'div', 'span', 'p', 'b', 'strong', 'i', 'em', 'u', 's', 'sub', 'sup', 'br', 'hr', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'blockquote'}
     blocks = []
 
+    def inline_translation(node):
+        for parent in node.parents:
+            if parent.name in {'deft', 'xt', 'at', 'ot'}:
+                return False
+            if parent.name in {'subjt', 'dis-gt', 'shcutt'} or set(parent.get('class', [])) & {'labels', 'grammar', 'registerlab', 'regionlab', 'dis-g', 'shcut', 'heading', 'unbox-title'}:
+                return True
+        return False
+
     def convert(node):
         if isinstance(node, Comment):
             return None
         if isinstance(node, NavigableString):
             return {'type': 'text', 'text': str(node)} if str(node) else None
         name, classes = node.name.lower(), set(node.get('class', []))
-        style = 'max-width:100%;overflow-wrap:anywhere;line-height:1.85;'
+        style = 'max-width:100%;word-break:normal;overflow-wrap:break-word;line-height:1.75;'
         if name in {'html', 'body', 'section', 'article', 'table', 'tbody', 'thead', 'tfoot', 'tr', 'deft', 'xt'}:
             tag = 'div'
         elif name in {'td', 'th'}:
@@ -233,13 +242,23 @@ def rich_blocks(html, with_info=False):
         else:
             tag = name if name in allowed else 'span'
         if name == 'chn':
-            style += 'display:block;opacity:.78;margin:3px 0 9px;'
+            style += 'display:inline;opacity:.8;margin-left:5px;' if inline_translation(node) else 'display:block;opacity:.85;margin:2px 0 7px;'
         if name in {'deft', 'xt'}:
             style += 'margin:3px 0 9px;'
         if 'sense' in classes:
             style += 'margin:14px 0;'
+        if 'webtop' in classes:
+            style += 'display:block;padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid #9dbbd233;'
         if 'headword' in classes:
-            style += 'font-size:22px;font-weight:700;'
+            style += 'font-size:20px;font-weight:600;margin:0 0 4px;'
+        if 'phonetics' in classes:
+            style += 'display:block;margin:4px 0;'
+        if classes & {'phons_br', 'phons_n_am'}:
+            style += 'display:inline-block;margin-right:12px;'
+        if 'labels' in classes:
+            style += 'display:block;margin:4px 0;'
+        if 'link-right' in classes:
+            style += 'display:block;font-size:11px;text-align:right;opacity:.55;margin:4px 0;'
         if classes & {'pos', 'grammar', 'labels', 'registerlab', 'regionlab'}:
             style += 'font-size:13px;opacity:.8;'
         if 'pos' in classes:
@@ -293,6 +312,5 @@ def rich_blocks(html, with_info=False):
         examples=[]
         for node in soup.select('.x'):
             sibling=node.find_next_sibling();examples.append({'en':node.get_text(' ',strip=True),'zh':sibling.get_text(' ',strip=True) if sibling and sibling.name.lower()=='xt' else '', 'source':'牛津十版'})
-        first=soup.find('chn')
-        return blocks,list(dict.fromkeys(related)),{'phonetics':phonetics,'examples':examples,'brief':first.get_text(' ',strip=True) if first else ''}
+        return blocks,list(dict.fromkeys(related)),{'phonetics':phonetics,'examples':examples,'brief':oxford_summary(soup)}
     return blocks, list(dict.fromkeys(related))

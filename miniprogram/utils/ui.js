@@ -1,13 +1,19 @@
 const store = require('./store');
+const tabs = require('../data/tabs');
 function apply(page) {
   const settings = store.settings(); let system = 'light';
   try { system = wx.getAppBaseInfo ? wx.getAppBaseInfo().theme : wx.getSystemInfoSync().theme; } catch (_) {}
   const dark = settings.theme === 'dark' || (settings.theme === 'system' && system === 'dark');
-  page.setData({ theme: dark ? 'dark' : 'light', fontSize: settings.fontSize });
-  const background = dark ? '#14212b' : '#f4f8fb';
+  const theme=dark?'dark':'light';
+  page.setData({ theme, fontSize: settings.fontSize, accent:dark?'#8bc5f5':'#278de0' });
+  const home=page.route==='pages/search/index';
+  const background = dark ? (home?'#17293b':'#131b26') : home?'#edf6ff':'#ffffff';
   wx.setNavigationBarColor({ frontColor: dark ? '#ffffff' : '#000000', backgroundColor: background });
-  wx.setBackgroundColor({ backgroundColor: background });
-  wx.setTabBarStyle({ color: dark ? '#9aafbd' : '#8193a1', selectedColor: dark ? '#8bc3ee' : '#267fbb', backgroundColor: dark ? '#1c2d39' : '#ffffff', borderStyle: dark ? 'black' : 'white', fail() {} });
+  wx.setBackgroundColor({ backgroundColor: dark?'#131b26':'#f7f9fc' });
+  if(typeof page.getTabBar==='function'){
+    const bar=page.getTabBar(),selected=tabs.findIndex(tab=>tab.pagePath===page.route);
+    if(bar&&selected>=0)bar.setData({theme,selected});
+  }
 }
 function error(error) { wx.showToast({ title: error.message || '操作未完成，请重试', icon: 'none', duration: 2800 }); }
 function open(word) { wx.navigateTo({ url: '/pages/entry/index?q=' + encodeURIComponent(word) }); }

@@ -44,6 +44,25 @@ test('import rejects a ZIP path traversal before native extraction', async () =>
   await assert.rejects(pack.install([zip]), /不允许的路径/);
   assert.equal((await pack.status()).installed, false);
 });
+
+test('Chinese reverse lookup ranks a direct definition ahead of an incidental example in a shorter word',async()=>{
+  const zlib=require('node:zlib'),crypto=require('node:crypto');
+  const bodies=[Buffer.from('<defT>use<chn>使用</chn><xt>Example<chn>在人际关系中使用。</chn></xt></defT>'),Buffer.from('<defT>interpersonal<chn>人际关系的</chn></defT>')].map(body=>zlib.deflateSync(body));
+  const files={'parts/000.bin':Buffer.concat(bodies),'lengths.bin':Buffer.from([3,13])};
+  files['docs/000.json']=Buffer.from(JSON.stringify({'0':[0,0,bodies[0].length,'use','使用'],'1':[0,bodies[0].length,bodies[1].length,'interpersonal','人际关系的']}));
+  const buckets=new Map();
+  for(const gram of ['人际','际关','关系']){const name='zh/'+codec.hashBucket(gram).toString(16).padStart(2,'0')+'.z';if(!buckets.has(name))buckets.set(name,{});buckets.get(name)[gram]='0001';}
+  for(const [name,values]of buckets)files[name]=zlib.deflateSync(Buffer.from(JSON.stringify(values)));
+  const manifest={format:'hange-oxford-pack',version:1,buckets:256,documentShardSize:512,uniqueDocuments:2,definitionRecords:2,redirectRecords:0,title:'Original test definitions',files:{},extractedBytes:0};
+  for(const [name,body]of Object.entries(files)){manifest.files[name]={bytes:body.length,sha256:crypto.createHash('sha256').update(body).digest('hex')};manifest.extractedBytes+=body.length;}
+  files['manifest.json']=Buffer.from(JSON.stringify(manifest));
+  const zip=path.join(temp,'original-ranking-fixture.zip');
+  const payload=JSON.stringify(Object.fromEntries(Object.entries(files).map(([name,body])=>[name,body.toString('base64')])));
+  const result=spawnSync('python',['-c','import zipfile,base64,json,sys;z=zipfile.ZipFile(sys.argv[1],"w");[(z.writestr(name,base64.b64decode(body))) for name,body in json.loads(sys.argv[2]).items()];z.close()',zip,payload],{encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);
+  try{await pack.install([zip]);const found=await pack.lookup('人际关系');assert.deepEqual(found.matches.map(row=>row.word),['interpersonal','use']);}
+  finally{await pack.remove();}
+});
 test('real private pack: import all volumes, full native lookup, aliases, Chinese reverse lookup, and removal', async t => {
   const reportFile = path.join(output, 'offline-pack-verification.json');
   if (!fs.existsSync(reportFile)) { t.skip('Private generated pack is absent'); return; }
@@ -63,6 +82,8 @@ test('real private pack: import all volumes, full native lookup, aliases, Chines
     checks.push({ word, documents: entry.oxford.documents, blocks: entry.oxford.blocks.length, text_chars: text.length });
   }
   const chinese = await pack.lookup('苹果'); assert.equal(chinese.kind, 'matches'); assert.ok(chinese.matches.some(x => x.word.toLowerCase() === 'apple'));
+  const related=(await pack.lookup('人际关系')).matches.map(row=>row.word);
+  assert.ok(related.indexOf('interpersonal')>=0&&related.indexOf('use')>=0&&related.indexOf('interpersonal')<related.indexOf('use'));
   const suggestions=await pack.suggest('subord'); assert.ok(suggestions.some(item=>item.word==='subordinate'));assert.ok(suggestions.every(item=>item.word.toLowerCase().startsWith('subord')));
   const run = await pack.lookup('run'); assert.ok(run.phonetics.uk); assert.ok(run.phonetics.us);
   const text = run.oxford.blocks.map(block => nodesText(block.nodes)).join('');

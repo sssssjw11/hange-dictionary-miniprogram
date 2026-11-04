@@ -1,5 +1,5 @@
 <view class="page {{theme}}">
- <text class="eyebrow">READ, NOTICE, REMEMBER</text><view class="reader-title">{{title}}</view><view wx:if="{{error}}" class="info">{{error}}</view>
+ <view class="reader-title">{{title}}</view><view wx:if="{{error}}" class="info">{{error}}</view>
  <view wx:if="{{total}}" class="reader-actions"><button bindtap="onSpeak">朗读本页</button><button bindtap="onTranslate">本页翻译</button><button bindtap="onSavePassage">收藏段落</button></view>
  <view wx:if="{{total}}" class="reader-actions"><button bindtap="onMarkMode">{{markMode ? '结束选段' : '选段标注'}}</button><button bindtap="onBookmark">{{bookmarked ? '移除本页书签' : '添加书签'}}</button><button bindtap="onAnnotations">批注 / 书签 {{annotationsCount}}</button></view>
  <view wx:if="{{markMode}}" class="info">依次点选起点和终点，可翻页选取。长按一个词也能直接保存标注。</view>

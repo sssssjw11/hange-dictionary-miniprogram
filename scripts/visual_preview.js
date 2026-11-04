@@ -33,9 +33,10 @@ function html(node) {
 function css(text, width) { return text.replace(/(-?\d+(?:\.\d+)?)rpx/g, (_, number) => Number(number) * width / 750 + 'px').replace(/(?<![.\w-])page(?=\s*\{)/g, 'body').replace(/\bview(?=[,{>\s])/g, 'div').replace(/\btext(?=[,{>\s])/g, 'span'); }
 function write(name, controller, width = 390, fileName = name) {
   const tree = compile('pages/' + name + '/index.wxml')(controller.data);
-  const style = fs.readFileSync(path.join(mini, 'app.wxss'), 'utf8') + fs.readFileSync(path.join(mini, 'pages', name, 'index.wxss'), 'utf8')+fs.readFileSync(path.join(mini,'components/group-picker/index.wxss'),'utf8');
+  const style = fs.readFileSync(path.join(mini, 'app.wxss'), 'utf8') + fs.readFileSync(path.join(mini, 'pages', name, 'index.wxss'), 'utf8')+fs.readFileSync(path.join(mini,'components/group-picker/index.wxss'),'utf8')+fs.readFileSync(path.join(mini,'custom-tab-bar/index.wxss'),'utf8');
   const tabList=JSON.parse(fs.readFileSync(path.join(mini,'app.json'),'utf8')).tabBar.list;
-  const tabs=tabList.some(tab=>tab.pagePath==='pages/'+name+'/index')?'<footer>'+tabList.map(tab=>'<span>'+escape(tab.text)+'</span>').join('')+'</footer>':'';
+  const selected=tabList.findIndex(tab=>tab.pagePath==='pages/'+name+'/index');
+  const tabs=selected>=0?html(compile('custom-tab-bar/index.wxml')({items:require('../miniprogram/data/tabs'),selected,theme:controller.data.theme,keyboard:false})):'';
   const document = '<!doctype html><html data-theme="'+controller.data.theme+'"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>涵词典 · WXML 投影预览</title><link rel="icon" href="data:,"><style>body{margin:0}*{box-sizing:border-box}input,textarea{max-width:100%}input,textarea{font:inherit}input{border:0;background:none;color:inherit;min-width:0}button{cursor:pointer}img{object-fit:contain}textarea{display:block}main{display:block}footer{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#fff;border-top:1px solid #e0eaf1;padding:12px;font-size:12px;color:#267fbb}.preview-label{background:#eaf4fb;color:#527186;font-size:10px;text-align:center;padding:4px}'+css(style,width)+'</style><div class="preview-label">WXML 编译树投影 · 非微信客户端运行截图</div>'+html(tree)+tabs+'</html>';
   fs.writeFileSync(path.join(root, 'output/preview', fileName + '.html'), document);
 }
@@ -72,6 +73,13 @@ function write(name, controller, width = 390, fileName = name) {
         for(const width of [320,390,768,1024]){
           const fileName=name+'-'+variant+'-'+theme+'-'+width;
           write(name,controller,width,fileName);manifest.push({name:name+'-'+variant,theme,width,file:fileName+'.html'});
+        }
+      }
+      if(name==='dictionaries'){
+        controller.setData({selectedFiles:[{key:'index',name:'牛津十版-微信离线词库-索引.zip',size:'18.2 MiB'},{key:'data1',name:'牛津十版-微信离线词库-数据1.zip',size:'48.0 MiB'},{key:'data2',name:'A'.repeat(180)+'.zip',size:'48.0 MiB'}]});
+        for(const width of [320,390,768,1024]){
+          const fileName=name+'-volumes-'+theme+'-'+width;
+          write(name,controller,width,fileName);manifest.push({name:name+'-volumes',theme,width,file:fileName+'.html'});
         }
       }
       if(name==='notebook'||name==='reader'||name==='annotation'){

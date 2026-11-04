@@ -1,1 +1,20 @@
-<view class="page {{theme}}"><text class="eyebrow">YOUR DICTIONARIES</text><view class="title">词库管理</view><view class="subtitle">把完整牛津词库放进微信本机。</view><view class="card dictionary-card"><view class="section-title">牛津高阶英汉双解 · 第10版</view><view wx:if="{{installed}}" class="info">已安装 · 完全离线查词<view>{{definitions}} 条正文 · {{redirects}} 条跳转</view><view>占用 {{size}}</view></view><view wx:else class="info">尚未导入。内置的开源示例词条仍可使用。</view><view class="small muted">一次选择“索引”ZIP 和全部“数据”ZIP 分卷。系统会逐文件核对 SHA-256，成功后才启用词库。</view><view class="actions"><button class="primary" disabled="{{working || installed}}" bindtap="onImport">导入牛津词库</button><button wx:if="{{installed || error}}" disabled="{{working}}" bindtap="onRemove">移除词库</button></view><view wx:if="{{working}}"><progress percent="{{progress}}" active="{{true}}" stroke-width="6" activeColor="#267fbb"/><view class="small muted">{{message}} · {{progress}}%</view></view><view wx:elif="{{message}}" class="small muted">{{message}}</view><view wx:if="{{error}}" class="error-text">{{error}}</view></view><view class="footer">词库数据由你自行提供，不在公开仓库中分发。全量正文、英美音标和中文反查索引都包含于离线包。包内没有原版音频或插图；朗读可连接本地语音服务。</view><view class="footer">导入新版前需先移除旧包，为微信本地文件空间腾出位置。请选择同一次生成的全部分卷，避免混用。</view></view>
+<view class="page {{theme}}">
+  <view class="title">词库管理</view><view class="subtitle">把完整牛津词库放进微信本机。</view>
+  <view class="card dictionary-card">
+    <view class="section-title">牛津高阶英汉双解 · 第10版</view>
+    <view wx:if="{{installed}}" class="info">已安装 · 完全离线查词<view>{{definitions}} 条正文 · {{redirects}} 条跳转</view><view>占用 {{size}}</view></view>
+    <view wx:else class="info">尚未导入。内置的开源示例词条仍可使用。</view>
+    <view class="small muted">添加“索引”ZIP 和全部“数据”ZIP 分卷，可一次多选，也可分次添加。选齐后点“开始导入”，系统逐文件校验成功才启用。</view>
+    <view wx:if="{{!installed}}" class="volume-list">
+      <view wx:for="{{selectedFiles}}" wx:key="key" class="selected-volume"><view class="volume-name"><text>{{item.name}}</text><text class="small muted">{{item.size}}</text></view><button class="text-button" disabled="{{working}}" data-index="{{index}}" bindtap="onRemoveFile" aria-label="移除此待导入分卷">移除</button></view>
+      <view class="actions"><button class="choose-volumes" disabled="{{working || broken}}" bindtap="onChooseFiles">添加分卷</button><button class="primary install-volumes" disabled="{{working || broken || !selectedFiles.length}}" bindtap="onImport">开始导入</button></view>
+      <view class="small muted">已选 {{selectedFiles.length}} 个 ZIP；离开此页面后需要重新选择。</view>
+    </view>
+    <view wx:if="{{installed || broken}}" class="actions"><button disabled="{{working}}" bindtap="onRemove">移除词库</button></view>
+    <view wx:if="{{working}}"><progress percent="{{progress}}" active="{{true}}" stroke-width="6" activeColor="{{accent}}"/><view class="small muted">{{message}} · {{progress}}%</view></view>
+    <view wx:elif="{{message}}" class="small muted">{{message}}</view>
+    <view wx:if="{{error}}" class="error-text">{{error}}</view>
+  </view>
+  <view class="footer">词库数据由你自行提供，不在公开仓库中分发。全量正文、英美音标和中文反查索引都包含于离线包。包内没有原版音频或插图；朗读可连接本地语音服务。</view>
+  <view class="footer">导入新版前需先移除旧包，为微信本地文件空间腾出位置。请选择同一次生成的全部分卷，避免混用。</view>
+</view>

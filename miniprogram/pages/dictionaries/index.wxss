@@ -1,1 +1,2 @@
 .dictionary-card{padding:30rpx;margin-top:32rpx}.error-text{color:#b85b50;font-size:25rpx;margin-top:18rpx}.dictionary-card progress{margin:18rpx 0}
+.volume-list{margin-top:22rpx}.selected-volume{display:flex;align-items:center;gap:18rpx;padding:18rpx 0;border-bottom:1rpx solid var(--line)}.volume-name{flex:1;min-width:0;font-size:23rpx;overflow-wrap:anywhere;word-break:break-word}.volume-name text{display:block}.selected-volume button{flex:none}

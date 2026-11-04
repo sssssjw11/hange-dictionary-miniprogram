@@ -5,6 +5,16 @@ const store=require('../miniprogram/utils/store');const study=require('../minipr
 function page(name){let definition;const file=path.join(__dirname,'../miniprogram/pages',name,'index.js');global.Page=value=>definition=value;delete require.cache[file];require(file);const controller={data:copy(definition.data),setData(value){const size=Buffer.byteLength(JSON.stringify(value));assert.ok(size<900000);packets.push(size);Object.assign(this.data,copy(value));}};for(const [key,value]of Object.entries(definition))if(typeof value==='function')controller[key]=value.bind(controller);return controller;}
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 test.beforeEach(()=>{memory.clear();packets=[];});
+
+test('a fresh learner starts with an available built-in deck and may deliberately select an empty wordbook',()=>{
+ const controller=page('study');controller.onShow();assert.equal(controller.data.deck,'starter');assert.ok(controller.data.queued>0);
+ controller.onDeck({currentTarget:{dataset:{id:'favorites'}}});controller.refresh();assert.equal(controller.data.deck,'favorites');assert.equal(controller.data.queued,0);
+});
+
+test('successful Chinese reverse queries are retained in history as queries rather than fabricated definitions',async()=>{
+ const original=dictionary.lookup;dictionary.lookup=async()=>({kind:'matches',matches:[{word:'interpersonal',meaning:'人际关系的'}]});
+ try{const controller=page('entry');await controller.load('人际关系');assert.equal(store.history()[0].word,'人际关系');assert.equal(store.history()[0].meaning,'找到 1 个相关词条');controller.onUnload();}finally{dictionary.lookup=original;}
+});
 test('10,000-word decks stay in logic storage; every word is reachable through bounded native pages',()=>{
  const words=Array.from({length:10000},(_,index)=>'word-'+String(index).padStart(5,'0'));
  const id=study.createDeck('Large deck',words.join('\n'));

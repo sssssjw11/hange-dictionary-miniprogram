@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'server'))
 from dictionary import connect
+from oxford_summary import oxford_summary
 
 def build(source,output):
     if not source.is_file() or output.exists() or output.with_suffix('.partial').exists():raise ValueError('Source must exist; index and partial output paths must be new')
@@ -23,7 +24,7 @@ def build(source,output):
         for identifier,word,body in original.execute('SELECT id,word,body FROM entries WHERE body IS NOT NULL'):
             soup=BeautifulSoup(zlib.decompress(body).decode(),'html.parser')
             for node in soup.select('script,style,audio-wr,.audio_play_button'):node.decompose()
-            text=soup.get_text();first=soup.find('chn');brief=first.get_text().strip()[:240] if first else ''
+            text=soup.get_text();brief=oxford_summary(soup)
             grams=set()
             for phrase in re.findall('[\u3400-\u9fff]+',text):grams.update(phrase[offset:offset+2] for offset in range(len(phrase)-1))
             if grams:

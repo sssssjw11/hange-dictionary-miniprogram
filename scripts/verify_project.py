@@ -37,7 +37,12 @@ def main():
         assert item['pagePath'] in app['pages']
         for key in ['iconPath', 'selectedIconPath']:
             assert (mini / item[key]).stat().st_size < 40000
-    for name,component in app.get('usingComponents',{}).items():
+    components=dict(app.get('usingComponents',{}))
+    if app['tabBar'].get('custom'):
+        components['custom-tab-bar']='/custom-tab-bar/index'
+        tabs=json.loads(subprocess.check_output(['node','-e',"process.stdout.write(JSON.stringify(require('./miniprogram/data/tabs.js')))"],cwd=ROOT,text=True,encoding='utf-8'))
+        assert [(item['pagePath'],item['text'],item['icon'],item['selectedIcon']) for item in tabs]==[(item['pagePath'],item['text'],'/'+item['iconPath'],'/'+item['selectedIconPath']) for item in app['tabBar']['list']]
+    for name,component in components.items():
         base=component.lstrip('/')
         for extension in ['.js','.json','.wxml','.wxss']:
             assert (mini/(base+extension)).is_file(), (name,extension)
@@ -52,6 +57,7 @@ def main():
         if mini in path.parents:
             source = path.read_text('utf-8')
             assert not re.search(r'wx\.(login|authorize|getUserProfile|getLocation|getPhoneNumber|requestPayment)\s*\(', source), path
+            assert not re.search(r"require\(['\"][^'\"]+\.json['\"]\)",source), 'Generate a JS module for native data: '+str(path)
     files = [path for path in mini.rglob('*') if path.is_file()]
     size = sum(path.stat().st_size for path in files)
     assert size < 2 * 1024 * 1024, size
