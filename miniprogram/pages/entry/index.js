@@ -63,7 +63,7 @@ Page({
   },
   contentsPage(index){
     const nav=(this._entry||{}).oxford||{},rows=nav.contents||[],pages=Math.max(1,Math.ceil(rows.length/24));index=Math.min(Math.max(0,index),pages-1);
-    const links=nav.localLinks||[];this.setData({contentsPage:index,contentsPages:pages,contentsTotal:rows.length,contentsRows:rows.slice(index*24,(index+1)*24).map((row,i)=>Object.assign({},row,{index:index*24+i})),localJumpRows:links.map((row,index)=>Object.assign({},row,{index})).filter(row=>(nav.anchors||[]).some(anchor=>anchor.id===row.anchor))});
+    const links=nav.localLinks||[];this.setData({contentsPage:index,contentsPages:pages,contentsTotal:rows.length,contentsRows:rows.slice(index*24,(index+1)*24).map((row,i)=>Object.assign({},row,{index:index*24+i})),localJumpRows:links.map((row,index)=>{const section=rows.find(item=>item.document===row.document&&item.kind==='词性'),pos=section&&section.label.split(' · ').slice(1).join(' · ');return Object.assign({},row,{index,displayLabel:links.filter(item=>item.label===row.label).length>1&&pos?row.label+' · '+pos:row.label});}).filter(row=>(nav.anchors||[]).some(anchor=>anchor.id===row.anchor))});
   },
   async onContents(){
     if(this.data.contentsLoading||!this._entry)return;

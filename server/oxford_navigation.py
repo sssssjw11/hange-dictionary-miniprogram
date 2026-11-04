@@ -10,6 +10,11 @@ def hidden(node):return isinstance(node,Comment) or isinstance(node,Tag) and (no
 def source_text(node):
     if node is None or hidden(node):return ''
     return str(node) if isinstance(node,NavigableString) else ''.join(source_text(child) for child in node.children)
+
+def heading_text(node):
+    if node is None or hidden(node):return ''
+    if isinstance(node,NavigableString):return str(node)
+    return ' · '+source_text(node) if node.name=='chn' else ''.join(heading_text(child) for child in node.children)
 def find(node,predicate):
     if hidden(node):return None
     if isinstance(node,Tag) and predicate(node):return node
@@ -27,12 +32,14 @@ def decode(value):
 def heading(node,word):
     c=classes(node);by_class=lambda name:find(node,lambda item:name in classes(item))
     if 'entry' in c:return '词性',' · '.join(filter(None,[source_text(by_class('headword')) or word,source_text(by_class('pos'))]))
-    if 'shcut' in c:return '主题',source_text(node)
+    if 'shcut' in c:return '主题',heading_text(node)
     if 'sense' in c:
         translated=find(node,lambda item:item.name=='deft');english=by_class('def')
         value=(source_text(translated) if source_text(translated).strip() else source_text(english)) or source_text(node) or '参见原文'
         return '义项',(str(node['sensenum'])+'. ' if node.get('sensenum') else '')+value
-    if 'unbox' in c:return '补充',source_text(by_class('box_title') or by_class('unbox-title')) or node.get('unbox','补充内容')
+    if 'unbox' in c:
+        title=by_class('box_title') or by_class('unbox-title')
+        return '补充' if title else '搭配',source_text(title or node) or node.get('unbox','补充内容')
     if 'idm-g' in c:return '习语',source_text(by_class('idm'))
     if 'phrasal_verb_links' in c:return '短语动词',source_text(by_class('heading') or find(node,lambda item:item.name=='h2')) or 'Phrasal Verbs'
     return None

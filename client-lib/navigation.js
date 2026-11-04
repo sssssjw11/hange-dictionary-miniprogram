@@ -2,15 +2,16 @@ const ignored=new Set(['script','style','link','meta','base','iframe','object','
 const classes=node=>new Set(((node.attribs||{}).class||'').split(/\s+/));
 function hidden(node){return node.type==='comment'||ignored.has(node.name)||classes(node).has('audio_play_button')||/^sound:/i.test((node.attribs||{}).href||'');}
 function sourceText(node){return hidden(node)?'':node.type==='text'?node.data:(node.children||[]).map(sourceText).join('');}
+function headingText(node){return hidden(node)?'':node.type==='text'?node.data:node.name==='chn'?' · '+sourceText(node):(node.children||[]).map(headingText).join('');}
 function find(node,test){if(hidden(node))return null;if(test(node))return node;for(const child of node.children||[]){const value=find(child,test);if(value)return value;}return null;}
 function excerpt(value){const chars=Array.from(value.replace(/\s+/g,' ').trim());return chars.slice(0,120).join('')+(chars.length>120?'…':'');}
 export function sensePrefix(node){return classes(node).has('sense')&&(node.attribs||{}).sensenum?String(node.attribs.sensenum)+'. ':'';}
 function heading(node,word){
   const c=classes(node),at=node.attribs||{},byClass=name=>find(node,item=>classes(item).has(name));
   if(c.has('entry'))return{kind:'词性',label:[sourceText(byClass('headword')||{children:[]})||word,sourceText(byClass('pos')||{children:[]})].filter(Boolean).join(' · ')};
-  if(c.has('shcut'))return{kind:'主题',label:sourceText(node)};
+  if(c.has('shcut'))return{kind:'主题',label:headingText(node)};
   if(c.has('sense')){const translated=find(node,item=>item.name==='deft'),english=byClass('def');const value=(translated&&sourceText(translated).trim()?sourceText(translated):sourceText(english||{children:[]}))||sourceText(node)||'参见原文';return{kind:'义项',label:(at.sensenum?at.sensenum+'. ':'')+value};}
-  if(c.has('unbox')){const title=byClass('box_title')||byClass('unbox-title');return{kind:'补充',label:title?sourceText(title):at.unbox||'补充内容'};}
+  if(c.has('unbox')){const title=byClass('box_title')||byClass('unbox-title');return{kind:title?'补充':'搭配',label:sourceText(title||node)||at.unbox||'补充内容'};}
   if(c.has('idm-g'))return{kind:'习语',label:sourceText(byClass('idm')||{children:[]})};
   if(c.has('phrasal_verb_links')){const title=byClass('heading')||find(node,item=>item.name==='h2');return{kind:'短语动词',label:title?sourceText(title):'Phrasal Verbs'};}
   return null;
