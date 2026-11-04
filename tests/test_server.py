@@ -44,6 +44,19 @@ class RendererTest(unittest.TestCase):
             self.assertEqual({row['word'] for row in engine.chinese('键盘')},{'compiler','typing'})
             self.assertIn('原文匹配',next(row for row in engine.chinese('输') if row['word']=='input')['meaning'])
             self.assertEqual(engine.lookup('秘')['matches'],[])
+            # A supplemental entry for the inflection must not hide the Oxford
+            # canonical headword or attach the wrong WordNet senses/forms.
+            with closing(sqlite3.connect(folder/'dictionary.db')) as base:
+                base.executescript('CREATE TABLE entries(key TEXT,word TEXT,phonetic TEXT,zh TEXT,en TEXT,forms TEXT,tags TEXT); CREATE TABLE aliases(key TEXT,lemma TEXT); CREATE TABLE senses(key TEXT,json TEXT);')
+                base.executemany('INSERT INTO entries VALUES (?,?,?,?,?,?,?)',[
+                    ('love','love','lʌv','原创基本释义','original base definition','3:loves',''),
+                    ('loved','loved','','变形词的占位简释','','','')])
+                base.execute('INSERT INTO senses VALUES (?,?)',('love',json.dumps([{'pos':'v','definition':'original sense','examples':[],'synonyms':[],'antonyms':[]}])));base.commit()
+            combined=Engine(folder).lookup('loved')
+            self.assertEqual((combined['word'],combined['matchedFrom']),('love','loved'))
+            self.assertEqual(combined['phonetic'],'lʌv')
+            self.assertEqual(combined['senses'][0]['definition'],'original sense')
+            self.assertEqual(combined['forms'][0]['word'],'loves')
 
     def test_oxford_only_full_chinese_index(self):
         sys.path.insert(0,str(ROOT/'scripts'))

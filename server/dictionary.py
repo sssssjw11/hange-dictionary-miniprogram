@@ -153,18 +153,18 @@ class Engine:
         key = normalize(requested)
         if not self.base.is_file() and not self.oxford.is_file():
             raise FileNotFoundError('未找到补充词库，请按 README 配置本地数据')
-        matched, row = key, None
+        pages = self._oxford(key)
+        matched, row = normalize(pages[0][1]) if pages else key, None
         with (closing(connect(self.base)) if self.base.is_file() else nullcontext(None)) as db:
-            row = db.execute('SELECT word,phonetic,zh,en,forms,tags FROM entries WHERE key=?', (key,)).fetchone() if db else None
+            row = db.execute('SELECT word,phonetic,zh,en,forms,tags FROM entries WHERE key=?', (matched,)).fetchone() if db else None
             if not row and db:
-                alias = db.execute('SELECT lemma FROM aliases WHERE key=?', (key,)).fetchone()
+                alias = db.execute('SELECT lemma FROM aliases WHERE key=?', (matched,)).fetchone()
                 if alias:
                     matched = alias[0]
                     row = db.execute('SELECT word,phonetic,zh,en,forms,tags FROM entries WHERE key=?', (matched,)).fetchone()
             senses = db.execute('SELECT json FROM senses WHERE key=?', (matched,)).fetchone() if db else None
-        if not row and key in self.teaching:
-            row = (key, '', self.teaching[key]['title'], '', '', '')
-        pages = self._oxford(key)
+        if not row and matched in self.teaching:
+            row = (matched, '', self.teaching[matched]['title'], '', '', '')
         if not row and not pages:
             if has_han(key):
                 matches = self.chinese(key)
@@ -173,9 +173,9 @@ class Engine:
                     return dict(data, requested=requested, matchedFrom=requested)
                 return {'kind': 'matches', 'requested': requested, 'matches': matches}
             return {'kind': 'missing', 'requested': requested, 'suggestions': self.suggest(key)}
-        if not row and pages:
-            matched = normalize(pages[0][1])
         data = dict(zip(['word', 'phonetic', 'zh', 'en', 'formsRaw', 'tagsRaw'], row)) if row else {'word': pages[0][1]}
+        if pages:
+            data['word'] = pages[0][1]
         data.update(kind='entry', schema=1, requested=requested, source='service', senses=json.loads(senses[0]) if senses else [])
         if matched != key:
             data['matchedFrom'] = requested
