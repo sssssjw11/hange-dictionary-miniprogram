@@ -23,7 +23,7 @@ const dictionary = require('../miniprogram/services/dictionary');
 function page(name) {
   const file = path.join(root, 'miniprogram/pages', name, 'index.js'); let definition;
   global.Page = value => { definition = value; }; delete require.cache[file]; require(file);
-  const instance = { data: copy(definition.data), setData(value) { const bytes = Buffer.byteLength(JSON.stringify(value)); packets.push(bytes); assert.ok(bytes < 900000, 'setData payload must stay below the platform limit'); Object.assign(this.data, copy(value)); } };
+  const instance = { data: copy(definition.data), setData(value,callback) { const bytes = Buffer.byteLength(JSON.stringify(value)); packets.push(bytes); assert.ok(bytes < 900000, 'setData payload must stay below the platform limit'); Object.assign(this.data, copy(value));if(callback)callback(); } };
   Object.entries(definition).forEach(([key, value]) => { if (typeof value === 'function') instance[key] = value.bind(instance); });
   return instance;
 }
@@ -68,6 +68,42 @@ test('100-item history and clear preserve the learning notebook', () => {
   store.saveNote('run', '跑', 'note'); for (let i = 0; i < 105; i++) store.visit('word' + i, 'meaning');
   assert.equal(store.history().length, 100); assert.equal(store.history()[0].word, 'word104');
   store.clearHistory(); assert.deepEqual(store.history(), []); assert.equal(store.favorite('run').note, 'note');
+});
+
+test('native contents and cross-entry references focus the exact source offset while retaining same-headword drafts',async()=>{
+  const lookup=dictionary.lookup,codec=require('../miniprogram/vendor/codec');
+  const html='<div class="entry" id="entry"><h1 class="headword">demo</h1><span class="unbox" id="duplicate"><span class="box_title">Extra Examples</span>FIRST</span><span class="unbox" id="duplicate"><span class="box_title">Word Origin</span>SECOND</span><li class="sense" id="second" sensenum="2"><deft><chn>第二义项</chn></deft></li><a href="entry://alias#second">demo (2)</a><a href="entry://other#absent">other</a></div>';
+  dictionary.lookup=async word=>({kind:'entry',word:word==='other'?'other':'demo',matchedFrom:word==='alias'?'alias':'',source:'offline-pack',oxford:codec.renderOxford([{word,html}]),related:[]});
+  const text=nodes=>nodes.map(node=>node.type==='text'?node.text:text(node.children||[])).join('');
+  try{
+    const entry=page('entry');await entry.load('demo');entry.onNote({detail:{value:'Retain this unsaved draft'}});
+    const original=entry._entry.oxford.blocks.map(block=>text(block.nodes)).join('');
+    await entry.onContents();assert.equal(entry.data.contentsOpen,true);
+    const index=entry._entry.oxford.contents.findIndex(row=>row.label==='Word Origin');entry.onContentsItem({currentTarget:{dataset:{index}}});
+    assert.equal(entry.data.contentsOpen,false);assert.equal(entry.data.focusLabel,'Word Origin');assert.ok(text(entry._focus.blocks[entry._focus.index].nodes).startsWith('Word OriginSECOND'));
+    assert.equal(entry._focus.blocks.map(block=>text(block.nodes)).join(''),original);assert.equal(entry.data.noteStatus,'尚未保存');
+    entry.onClearFocus();assert.equal(entry._focus,null);assert.equal(entry.data.focusLabel,'');
+    await entry.onReference({currentTarget:{dataset:{index:0}}});assert.equal(entry.data.entry.word,'demo');assert.equal(entry.data.entry.matchedFrom,'');assert.equal(entry.data.note,'Retain this unsaved draft');assert.ok(text(entry._focus.blocks[entry._focus.index].nodes).startsWith('2. 第二义项'));assert.match(entry.onShareAppMessage().path,/anchor=second/);
+    await entry.onReference({currentTarget:{dataset:{index:1}}});assert.equal(entry.data.entry.word,'other');assert.ok(entry.data.focusError);assert.equal(entry.data.error,'');
+  }finally{dictionary.lookup=lookup;}
+});
+
+test('old full-entry caches can acquire contents without erasing a draft typed while refresh is pending',async()=>{
+  const lookup=dictionary.lookup,codec=require('../miniprogram/vendor/codec');let release;
+  const old={kind:'entry',word:'old-word',source:'cache',oxford:{blocks:[{id:'old',nodes:[{type:'text',text:'Original cached body'}]}]}};
+  const fresh={kind:'entry',word:'old-word',source:'service',oxford:codec.renderOxford([{word:'old-word',html:'<div class="entry" id="entry"><h1 class="headword">old-word</h1><li class="sense" id="sense"><deft>Full definition</deft></li></div>'}])};
+  dictionary.lookup=(word,options)=>options&&options.refresh?new Promise(resolve=>{release=resolve;}):Promise.resolve(old);
+  try{const entry=page('entry');await entry.load('old-word');const pending=entry.onContents();assert.equal(entry.data.contentsLoading,true);entry.onNote({detail:{value:'Draft typed during refresh'}});release(fresh);await pending;assert.equal(entry.data.note,'Draft typed during refresh');assert.equal(entry.data.contentsOpen,true);assert.equal(entry.data.contentsLoading,false);assert.ok(entry.data.contentsTotal>0);}
+  finally{dictionary.lookup=lookup;}
+});
+
+test('explicit original-entry refresh bypasses an old cache but leaves it usable on service failure',async()=>{
+  const request=wx.request;store.saveSettings({online:true,apiBase:'http://localhost:18759'});cache.put('refresh-word',{kind:'entry',word:'refresh-word',oxford:{blocks:[{id:'old',nodes:[]}]}});
+  try{let lookups=0;wx.request=o=>{if(o.url.endsWith('/health'))o.success({statusCode:200,data:{ready:true}});else{lookups++;o.success({statusCode:200,data:{kind:'entry',word:'refresh-word',oxford:{blocks:[],navVersion:1}}});}};
+    assert.equal((await dictionary.lookup('refresh-word')).source,'cache');assert.equal(lookups,0);
+    assert.equal((await dictionary.lookup('refresh-word',{refresh:true})).oxford.navVersion,1);assert.equal(lookups,1);
+    wx.request=o=>o.fail({errMsg:'test service unavailable'});assert.equal((await dictionary.lookup('refresh-word',{refresh:true})).source,'cache');assert.equal(cache.get('refresh-word').oxford.navVersion,1);
+  }finally{wx.request=request;}
 });
 
 test('every related expression remains reachable without sending the complete link list to the view',async()=>{

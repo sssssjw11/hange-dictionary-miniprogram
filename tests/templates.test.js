@@ -32,3 +32,8 @@ test('native entry template selects Oxford nodes and teaching content correctly'
   const teaching = compile('pages/entry/index.wxml')(Object.assign({}, data, { source: 'teaching' }));
   assert.ok(text(teaching).includes('Learning explanation')); assert.equal(nodes(teaching).filter(x => x.tag === 'wx-rich-text').length, 0);
 });
+
+test('contents rows and source focus blocks use native buttons and addressable outer views',()=>{
+  const data={loading:false,theme:'light',entry:{word:'demo',hasOxford:true,hasContents:true,forms:[]},source:'oxford',contentsOpen:true,contentsRows:[{key:'0-0',index:0,kind:'义项',label:'2. 原文义项'}],contentsPages:1,localJumpRows:[],oxfordBlocks:[{id:'0-1-focus',nodes:[{type:'text',text:'Original source fragment'}]}],totalPages:1,relatedTotal:1,referenceRows:[{index:0,label:'other (2)',word:'other',anchor:'second'}]};
+  const result=compile('pages/entry/index.wxml')(data),all=nodes(result);assert.ok(text(result).includes('牛津目录'));assert.ok(text(result).includes('2. 原文义项'));assert.ok(all.some(node=>node.attr&&node.attr.id==='oxford-0-1-focus'));assert.ok(all.some(node=>node.attr&&node.attr.bindtap==='onReference'));assert.ok(all.some(node=>node.attr&&node.attr.bindtap==='onContentsItem'));
+});

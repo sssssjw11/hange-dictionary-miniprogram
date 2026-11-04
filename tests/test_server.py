@@ -28,6 +28,17 @@ def node_text(nodes):
 
 
 class RendererTest(unittest.TestCase):
+    def test_navigation_offsets_are_utf16_and_preserve_fragment_targets_and_explicit_sense_numbers(self):
+        html='<div class="entry" id="entry"><h1 class="headword">demo</h1><span class="pos">noun</span><div class="phons_br"><span class="phon">/demo/</span></div><li class="sense" id="second" sensenum="2"><deft><chn>第二😀义项</chn></deft></li><span class="unbox" id="repeat"><span class="box_title">Extra Examples</span>ONE</span><span class="unbox" id="repeat"><span class="box_title">Word Origin</span>TWO</span><a href="entry://word%23name#target%2F2">word#name (2)</a><a href="#second">本页</a></div>'
+        blocks,_,info=rich_blocks(html,with_info=True,word='demo');text=''.join(node_text(block) for block in blocks)
+        target=next(row for row in info['anchors'] if row['id']=='second')
+        self.assertEqual(target['position'],len(text[:text.index('2. 第二😀义项')].encode('utf-16-le'))//2)
+        self.assertEqual(len([row for row in info['anchors'] if row['id']=='repeat']),2)
+        self.assertEqual(info['references'],[{'word':'word#name','anchor':'target/2','label':'word#name (2)'}])
+        self.assertEqual(info['localLinks'][0]['anchor'],'second')
+        origin=next(row for row in info['contents'] if row['label']=='Word Origin')
+        self.assertEqual(text.encode('utf-16-le')[origin['position']*2:].decode('utf-16-le').startswith('Word OriginTWO'),True)
+
     def test_supplement_endpoint_returns_canonical_metadata_without_the_oxford_body(self):
         from search_fixture import build_source
         with tempfile.TemporaryDirectory() as temporary:

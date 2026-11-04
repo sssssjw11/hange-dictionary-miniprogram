@@ -1,6 +1,8 @@
 import { parseDocument } from 'htmlparser2';
 import { unzlibSync, strFromU8 } from 'fflate';
 import { sha256 } from '@noble/hashes/sha256';
+import { navigation, sensePrefix } from './navigation';
+export { focusOxford } from './navigation';
 
 export { unzlibSync, strFromU8, sha256 };
 export function utf8Length(value) {
@@ -45,9 +47,10 @@ function summaryParts(root) {
 function summary(parts) { return Array.from((parts.definitions.length?parts.definitions:parts.fallback.slice(0,1)).join(' / ')).slice(0,240).join(''); }
 export function oxfordSummary(html) { return summary(summaryParts(parseDocument(html,{decodeEntities:true}))); }
 export function renderOxford(pages) {
-  const blocks = [], related = [], phonetics = {}, examples = [], parts={definitions:[],fallback:[]}; let chineseNodes = 0, senses = 0;
+  const blocks = [], related = [], phonetics = {}, examples = [], parts={definitions:[],fallback:[]},anchors=[],contents=[],references=[],localLinks=[]; let chineseNodes = 0, senses = 0;
   pages.forEach((page, pageIndex) => {
     const root = parseDocument(page.html, { decodeEntities: true });
+    const firstBlock=blocks.length;
     const currentSummary=summaryParts(root);
     for(const type of ['definitions','fallback'])for(const value of currentSummary[type])if(parts[type].length<4&&!parts[type].includes(value))parts[type].push(value);
     function convert(node) {
@@ -70,7 +73,7 @@ export function renderOxford(pages) {
       if (['td','th'].includes(name)) { tag = 'span'; style += 'display:inline-block;padding-right:12px;'; }
       if (name === 'chn') style += inlineTranslation(node)?'display:inline;opacity:.8;margin-left:5px;':'display:block;opacity:.85;margin:2px 0 7px;';
       if (['deft','xt'].includes(name)) style += 'margin:3px 0 9px;';
-      if (classes.has('sense')) style += 'margin:14px 0;';
+      if (classes.has('sense')) {tag='div';style += 'margin:14px 0;';}
       if (classes.has('webtop')) style += 'display:block;padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid #9dbbd233;';
       if (classes.has('headword')) style += 'font-size:20px;font-weight:600;margin:0 0 4px;';
       if (classes.has('phonetics')) style += 'display:block;margin:4px 0;';
@@ -85,6 +88,7 @@ export function renderOxford(pages) {
       const children = (node.children || []).map(convert).filter(Boolean);
       if (classes.has('phons_br')) children.unshift({ type: 'text', text: '英 ' });
       if (classes.has('phons_n_am')) children.unshift({ type: 'text', text: '美 ' });
+      const number=sensePrefix(node);if(number)children.unshift({type:'text',text:number});
       return { type: 'node', name: tag, attrs: { style }, children };
     }
     function fragments(node) {
@@ -98,6 +102,10 @@ export function renderOxford(pages) {
       for (const fragment of fragments(node)) { const length = utf8Length(JSON.stringify(fragment)); if (current.length && size + length > 22000) { blocks.push({ id: pageIndex + '-' + blocks.length, nodes: current }); current = []; size = 0; } current.push(fragment); size += length; }
     }
     if (current.length) blocks.push({ id: pageIndex + '-' + blocks.length, nodes: current });
+    const nav=navigation(root,blocks.slice(firstBlock),pageIndex,page.word||'');
+    for(const key of ['anchors','contents'])for(const item of nav[key])if(item.blockIndex>=0)item.blockIndex+=firstBlock;
+    anchors.push(...nav.anchors);contents.push(...nav.contents);references.push(...nav.references);localLinks.push(...nav.localLinks);
   });
-  return { title: '牛津高阶英汉双解 · 第10版', documents: pages.length, blocks, related: Array.from(new Set(related)), phonetics, chineseNodes, senses, examples, brief:summary(parts) };
+  const seen=new Set(),uniqueReferences=references.filter(row=>{const key=row.word+'\0'+row.anchor;if(seen.has(key))return false;seen.add(key);return true;});
+  return { title: '牛津高阶英汉双解 · 第10版', documents: pages.length, blocks, related: Array.from(new Set(related)), phonetics, chineseNodes, senses, examples, brief:summary(parts),navVersion:1,anchors,contents,references:uniqueReferences,localLinks };
 }

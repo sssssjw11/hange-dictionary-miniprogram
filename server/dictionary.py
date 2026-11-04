@@ -15,6 +15,7 @@ import zlib
 
 from bs4 import BeautifulSoup, Comment, NavigableString
 from oxford_summary import oxford_summary, visible_soup
+from oxford_navigation import navigation, sense_prefix
 from text_index import normalize, has_han, query_terms, meaning_rank
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,7 +64,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.5.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.6.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -237,14 +238,27 @@ class Engine:
                 data['forms'].append({'label': labels[code], 'word': word})
         data['tags'] = (data.pop('tagsRaw', '') or '').split()
         blocks, related, examples, phonetics, brief = [], [], [], {}, ''
-        for identifier, headword, html in pages:
-            rendered, links, info = rich_blocks(html, with_info=True)
+        anchors=[];contents=[];references=[];local_links=[]
+        for document,(identifier, headword, html) in enumerate(pages):
+            first_block=len(blocks)
+            rendered, links, info = rich_blocks(html, with_info=True,word=headword)
             for nodes in rendered:
                 blocks.append({'id': str(identifier) + '-' + str(len(blocks)), 'nodes': nodes})
             related.extend(links)
             examples.extend(info['examples']);phonetics.update(info['phonetics'])
             if not brief:brief=info['brief']
-        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief}
+            for name,target in [('anchors',anchors),('contents',contents)]:
+                for ordinal,item in enumerate(info[name]):
+                    item=dict(item,document=document)
+                    if item['blockIndex']>=0:item['blockIndex']+=first_block
+                    if name=='contents':item['key']=str(document)+'-'+str(ordinal)
+                    target.append(item)
+            references.extend(info['references']);local_links.extend(dict(item,document=document) for item in info['localLinks'])
+        seen_references=set();unique_references=[]
+        for item in references:
+            key=(item['word'],item['anchor'])
+            if key not in seen_references:seen_references.add(key);unique_references.append(item)
+        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'localLinks':local_links}
         data['brief']=brief
         data['phonetics']=phonetics
         related.extend((data.get('teaching') or {}).get('related', []))
@@ -252,7 +266,7 @@ class Engine:
         return data
 
 
-def rich_blocks(html, with_info=False):
+def rich_blocks(html, with_info=False,word=''):
     """Map every source text node to trusted mini-program rich-text nodes.
 
     Unknown/custom tags are mapped rather than dropped; source JavaScript is never
@@ -300,7 +314,7 @@ def rich_blocks(html, with_info=False):
         if name in {'deft', 'xt'}:
             style += 'margin:3px 0 9px;'
         if 'sense' in classes:
-            style += 'margin:14px 0;'
+            tag='div';style += 'margin:14px 0;'
         if 'webtop' in classes:
             style += 'display:block;padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid #9dbbd233;'
         if 'headword' in classes:
@@ -328,6 +342,8 @@ def rich_blocks(html, with_info=False):
             children.insert(0, {'type': 'text', 'text': '英 '})
         if 'phons_n_am' in classes:
             children.insert(0, {'type': 'text', 'text': '美 '})
+        number=sense_prefix(node)
+        if number:children.insert(0,{'type':'text','text':number})
         return {'type': 'node', 'name': tag, 'attrs': {'style': style}, 'children': children}
 
     def size(node):
@@ -366,5 +382,5 @@ def rich_blocks(html, with_info=False):
         examples=[]
         for node in soup.select('.x'):
             sibling=node.find_next_sibling();examples.append({'en':node.get_text(' ',strip=True),'zh':sibling.get_text(' ',strip=True) if sibling and sibling.name.lower()=='xt' else '', 'source':'牛津十版'})
-        return blocks,list(dict.fromkeys(related)),{'phonetics':phonetics,'examples':examples,'brief':oxford_summary(soup)}
+        return blocks,list(dict.fromkeys(related)),dict(navigation(soup,blocks,word),phonetics=phonetics,examples=examples,brief=oxford_summary(soup))
     return blocks, list(dict.fromkeys(related))

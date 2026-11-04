@@ -83,10 +83,16 @@ function write(name, controller, width = 390, fileName = name) {
         }
       }
       if(name==='entry'){
-        const original=JSON.parse(JSON.stringify(controller.data));
-        for(const variant of ['matches','matches-last','matches-error','related','supplement-loading','supplement-error','supplement-wordnet']){
-          controller.setData(original);
-          if(variant==='related'){
+        const original=JSON.parse(JSON.stringify(controller.data)),originalEntry=controller._entry;
+        for(const variant of ['matches','matches-last','matches-error','related','supplement-loading','supplement-error','supplement-wordnet','contents','focus','focus-missing']){
+          controller._entry=originalEntry;controller._focus=null;controller.setData(original);
+          if(['contents','focus','focus-missing'].includes(variant)){
+            const codec=require('../miniprogram/vendor/codec');
+            const oxford=codec.renderOxford([{word:'layout',html:'<div class="entry" id="layout-entry"><span class="headword">layout</span><span class="pos">noun</span><li class="sense" sensenum="2" id="layout-sense"><span class="def">An original layout fixture.</span><defT><chn>包含中文与 English 的原创布局示例，用于检查长目录及定位说明在窄屏上的换行。</chn></defT></li><div class="unbox" id="layout-box"><div class="box_title">Extra Examples 补充例句</div><p>Read one useful example every day. 每天读一个有用的例句。</p></div><a href="#layout-box">补充例句</a></div>'}]);
+            controller._entry=Object.assign({},originalEntry,{oxford});controller.setData({source:'oxford',entry:Object.assign({},original.entry,{hasContents:true}),contentsOpen:variant==='contents'});controller.contentsPage(0);controller.contentPage(0);
+            if(variant==='focus')controller.focusTarget(oxford.contents.find(row=>row.kind==='义项'),'2. 包含中文与 English 的原创布局示例，用于检查长定位说明的完整换行。');
+            if(variant==='focus-missing')controller.focusAnchor('absent-source-target');
+          }else if(variant==='related'){
             controller._entry.related=Array.from({length:75},(_,index)=>'original related expression '+index);controller.relatedPage(3);
           }else if(variant.startsWith('supplement-')){
             controller.setData({supplementLoading:variant==='supplement-loading',supplementError:variant==='supplement-error'?'未连接到补充词库，牛津正文仍可离线查阅，请稍后重试。':'',supplementState:variant==='supplement-wordnet'?'cache':'',supplementNote:variant==='supplement-wordnet'?'补充词典已缓存，可离线查阅':'简释 · 英语分义 · 用法说明'});

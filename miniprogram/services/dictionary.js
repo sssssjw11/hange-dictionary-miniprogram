@@ -35,10 +35,10 @@ function local(word, cursor = 0) {
   }
   return null;
 }
-async function lookup(word) {
-  word = String(word || '').trim(); if (!word || word.length > 256) throw new Error('请输入 1～256 字的单词或短语');
-  const key = store.key(word), stored = cache.get(key);
-  if (pending.has(key)) return pending.get(key);
+async function lookup(word,options={}) {
+  word = String(word || '').trim(); if (!word || word.length > 256 || word.includes('\0')) throw new Error('请输入 1～256 字的单词或短语');
+  const key = store.key(word), stored = cache.get(key),pendingKey=key+(options.refresh?'\0refresh':'');
+  if (pending.has(pendingKey)) return pending.get(pendingKey);
   const task = (async () => {
     const installed = await offlinePack.status();
     if (installed.installed) {
@@ -52,11 +52,11 @@ async function lookup(word) {
         return result;
       }
     }
-    if (stored && stored.kind === 'entry') return Object.assign({}, stored, { source: 'cache', requested: word });
-    let fallback=local(word);
+    if (!options.refresh&&stored && stored.kind === 'entry') return Object.assign({}, stored, { source: 'cache', requested: word });
+    let fallback=stored&&stored.kind==='entry'?Object.assign({},stored,{source:'cache',requested:word}):local(word);
     const extra=cache.getSupplement(word);
     if(extra&&extra.kind==='supplement'&&store.key(extra.word)===key)fallback=mergeSupplement(fallback||{kind:'entry',word:extra.word,requested:word,source:'cache',oxford:{blocks:[]}},Object.assign({},extra,{source:'cache'}));
-    const state = await status(false,true);
+    const state = await status(!!options.refresh,true);
     if (state.ready) {
       try { const entry = await request('lookup', { q: word }); if (entry.kind === 'entry') cache.put(key, entry); return entry; }
       catch (error) { if (!fallback) throw error; }
@@ -65,8 +65,8 @@ async function lookup(word) {
     if (installed.installed) return {kind:'missing',requested:word,source:'offline-pack',offline:true};
     throw new Error('当前未连接全量词库，且此词尚未缓存。请连接词库服务后重试。');
   })();
-  pending.set(key, task);
-  try { return await task; } finally { pending.delete(key); }
+  pending.set(pendingKey, task);
+  try { return await task; } finally { pending.delete(pendingKey); }
 }
 async function suggest(word) {
   const key = store.key(word); if (!key || chineseSearch.hasHan(key)) return [];
