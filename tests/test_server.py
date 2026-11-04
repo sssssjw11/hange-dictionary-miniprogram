@@ -10,6 +10,7 @@ import tempfile
 import sqlite3
 import unittest
 import zlib
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import urlopen
 from urllib.parse import quote
@@ -40,10 +41,13 @@ class RendererTest(unittest.TestCase):
                     ('indexed-00039','INDEXED-00039','','索引检索测试','','',''),
                     ('supplement-only','supplement-only','','索引检索测试','','','')]);db.commit()
             engine=Engine(folder);term='索引检索测试';pages=[];cursor=0
-            while True:
-                page=engine.chinese_page(term,cursor);pages.append(page)
-                if page['nextCursor'] is None:break
-                self.assertGreater(page['nextCursor'],cursor);cursor=page['nextCursor']
+            import dictionary
+            with patch('dictionary.visible_soup',wraps=dictionary.visible_soup) as parsed:
+                while True:
+                    page=engine.chinese_page(term,cursor);pages.append(page)
+                    if page['nextCursor'] is None:break
+                    self.assertGreater(page['nextCursor'],cursor);cursor=page['nextCursor']
+                self.assertEqual(parsed.call_count,82,'Each candidate body is parsed once across all pages, including false positives')
             self.assertEqual([len(page['matches']) for page in pages],[40,40,2])
             self.assertEqual([row['word'] for page in pages for row in page['matches']],['indexed-%05d'%i for i in range(81)]+['supplement-only'])
             self.assertEqual(engine.lookup(term)['nextCursor'],40)

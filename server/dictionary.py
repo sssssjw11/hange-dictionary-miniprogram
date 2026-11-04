@@ -1,6 +1,6 @@
 """Read-only dictionary engine. No publisher downloads or user-account database."""
 from __future__ import annotations
-from collections import deque
+from collections import deque, OrderedDict
 from contextlib import closing, nullcontext
 from functools import lru_cache
 import hashlib
@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+from threading import RLock
 from urllib.parse import unquote
 import zlib
 
@@ -40,6 +41,8 @@ class Engine:
         self.chinese_index = self.folder / 'oxford/chinese.db'
         self.oxford_chinese = False
         self.oxford_single_character = False
+        self._chinese_checks = OrderedDict()
+        self._chinese_checks_lock = RLock()
         if self.chinese_index.is_file() and self.oxford.is_file():
             try:
                 with closing(connect(self.chinese_index)) as index, closing(connect(self.oxford)) as source:
@@ -114,6 +117,21 @@ class Engine:
                         result.append({'word': headword, 'meaning': zh})
         return result
 
+    def _chinese_contains(self, identifier, term, source):
+        # Keep only booleans for two queries. Later pages can revisit the SQL
+        # prefix without reparsing its full HTML, or holding open connections.
+        with self._chinese_checks_lock:
+            checks=self._chinese_checks.get(term)
+            if checks is None:
+                if len(self._chinese_checks)>=2:self._chinese_checks.popitem(last=False)
+                checks={};self._chinese_checks[term]=checks
+            self._chinese_checks.move_to_end(term)
+            if identifier in checks:return checks[identifier]
+        body=source.execute('SELECT body FROM entries WHERE id=?',(identifier,)).fetchone()[0]
+        found=term in normalize(visible_soup(zlib.decompress(body).decode()).get_text())
+        with self._chinese_checks_lock:checks[identifier]=found
+        return found
+
     def _chinese_rows(self, term):
         seen = set()
         if self.oxford_chinese:
@@ -126,9 +144,7 @@ class Engine:
                     for identifier,word,brief in rows:
                         key=normalize(word)
                         if key in seen:continue
-                        body=source.execute('SELECT body FROM entries WHERE id=?',(identifier,)).fetchone()[0]
-                        text=normalize(visible_soup(zlib.decompress(body).decode()).get_text())
-                        if term in text:
+                        if self._chinese_contains(identifier,term,source):
                             seen.add(key)
                             yield {'word':word,'meaning':brief or '原文匹配：'+term}
         for word,note in self.teaching.items():
