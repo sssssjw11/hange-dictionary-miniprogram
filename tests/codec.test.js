@@ -27,7 +27,7 @@ test('related links use the complete 256-character query contract and preserve l
 
 test('Oxford navigation retains fragment targets and duplicate ids with correct Unicode and generated pronunciation offsets',()=>{
  const codec=require('../miniprogram/vendor/codec');
- const html='<div class="entry" id="entry"><h1 class="headword">demo</h1><span class="pos">noun</span><div class="phons_br"><span class="phon">/demo/</span></div><li class="sense" id="sense" sensenum="2"><deft><chn>第二😀义项</chn></deft></li><span class="unbox" id="repeat"><span class="box_title">Extra Examples</span>ONE</span><span class="unbox" id="repeat"><span class="box_title">Word Origin</span>TWO</span><a href="entry://word%23name#target%2F2">word#name (2)</a><a href="#sense">本页义项</a><h2 class="shcut">topic<chn>主题</chn></h2><span class="unbox">adverb</span><script id="ignore">ignored</script></div>';
+ const html='<div class="entry" id="entry"><h1 class="headword">demo</h1><span class="pos">noun</span><div class="phons_br"><span class="phon">/demo/</span></div><li class="sense" id="sense" sensenum="2"><deft><chn>第二😀义项</chn></deft></li><span class="unbox" id="repeat"><span class="box_title">Extra Examples</span>ONE</span><span class="unbox" id="repeat"><span class="box_title">Word Origin</span><span class="body"><span class="p">TWO</span></span></span><a href="entry://word%23name#target%2F2">word#name (2)</a><a href="#sense">本页义项</a><h2 class="shcut">topic<chn>主题</chn></h2><span class="unbox">adverb</span><script id="ignore">ignored</script></div>';
  const rendered=codec.renderOxford([{word:'demo',html}]);
  const text=nodes=>nodes.map(node=>node.type==='text'?node.text:text(node.children||[])).join('');
  const body=rendered.blocks.map(block=>text(block.nodes)).join('');
@@ -36,6 +36,8 @@ test('Oxford navigation retains fragment targets and duplicate ids with correct 
  assert.deepEqual(rendered.references,[{word:'word#name',anchor:'target/2',label:'word#name (2)'}]);assert.equal(rendered.localLinks[0].anchor,'sense');
  assert.ok(rendered.contents.some(row=>row.kind==='主题'&&row.label==='topic · 主题'));assert.ok(rendered.contents.some(row=>row.kind==='搭配'&&row.label==='adverb'));
  const origin=rendered.contents.find(x=>x.label==='Word Origin');assert.ok(origin);assert.equal(body.slice(origin.position).startsWith('Word OriginTWO'),true);
+ const all=[];const walk=nodes=>nodes.forEach(node=>{if(node.type!=='text'){all.push(node);walk(node.children||[]);}});rendered.blocks.forEach(block=>walk(block.nodes));
+ assert.ok(all.some(node=>node.name==='div'&&text(node.children)==='Word Origin'&&node.attrs.style.includes('display:block')));assert.ok(all.some(node=>node.name==='div'&&text(node.children)==='Word OriginTWO'&&node.attrs.style.includes('border-left:3px')));
  const saved=JSON.stringify(rendered.blocks),focused=codec.focusOxford(rendered,origin);
  assert.equal(focused.blocks.map(block=>text(block.nodes)).join(''),body);assert.ok(text(focused.blocks[focused.index].nodes).startsWith('Word OriginTWO'));assert.equal(JSON.stringify(rendered.blocks),saved);
 });

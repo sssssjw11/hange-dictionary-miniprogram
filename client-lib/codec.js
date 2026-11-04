@@ -82,8 +82,16 @@ export function renderOxford(pages) {
       if (classes.has('link-right')) style += 'display:block;font-size:11px;text-align:right;opacity:.55;margin:4px 0;';
       if (['pos','grammar','labels','registerlab','regionlab'].some(x => classes.has(x))) style += 'font-size:13px;opacity:.8;';
       if (classes.has('pos')) style += 'font-style:italic;margin-left:6px;';
-      if (classes.has('unbox') || classes.has('collapse')) style += 'margin:10px 0;padding:10px;border:1px solid #9dbbd244;border-radius:8px;';
-      if (['heading','sensetop','unbox-title'].some(x => classes.has(x))) style += 'font-weight:600;';
+      if (classes.has('collapse')) {tag='div';style += 'display:block;margin:12px 0;';}
+      if (classes.has('unbox')) {
+        tag='div';
+        const box=(node.attribs||{}).unbox||(node.children||[]).some(child=>((child.attribs||{}).class||'').split(/\s+/).includes('box_title'));
+        style += box?'display:block;margin:12px 0;padding:12px 14px;border:1px solid #9dbbd233;border-left:3px solid #278de0aa;border-radius:10px;font-weight:400;':'display:block;margin:10px 0 5px;font-size:13px;font-weight:600;opacity:.8;';
+      }
+      if (classes.has('box_title')||classes.has('unbox-title')) {tag='div';style += 'display:block;margin:0 0 8px;font-size:14px;font-weight:600;';}
+      if (classes.has('body')||classes.has('p')) {tag='div';style += 'display:block;font-weight:400;';}
+      if (classes.has('p')) style += 'margin:7px 0;';
+      if (classes.has('heading')) style += 'font-weight:600;';
       if (['ol','ul'].includes(name)) style += 'padding-left:20px;margin:6px 0;';
       const children = (node.children || []).map(convert).filter(Boolean);
       if (classes.has('phons_br')) children.unshift({ type: 'text', text: '英 ' });

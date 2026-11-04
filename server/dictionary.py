@@ -331,10 +331,18 @@ def rich_blocks(html, with_info=False,word=''):
             style += 'font-size:13px;opacity:.8;'
         if 'pos' in classes:
             style += 'font-style:italic;margin-left:6px;'
-        if classes & {'unbox', 'collapse'}:
-            style += 'margin:10px 0;padding:10px;border:1px solid #9dbbd244;border-radius:8px;'
-        if classes & {'heading', 'sensetop', 'unbox-title'}:
-            style += 'font-weight:600;'
+        if 'collapse' in classes:
+            tag='div';style += 'display:block;margin:12px 0;'
+        if 'unbox' in classes:
+            tag='div'
+            box=node.get('unbox') or node.find(class_='box_title',recursive=False)
+            style += 'display:block;margin:12px 0;padding:12px 14px;border:1px solid #9dbbd233;border-left:3px solid #278de0aa;border-radius:10px;font-weight:400;' if box else 'display:block;margin:10px 0 5px;font-size:13px;font-weight:600;opacity:.8;'
+        if classes & {'box_title','unbox-title'}:
+            tag='div';style += 'display:block;margin:0 0 8px;font-size:14px;font-weight:600;'
+        if classes & {'body','p'}:
+            tag='div';style += 'display:block;font-weight:400;'
+        if 'p' in classes:style += 'margin:7px 0;'
+        if 'heading' in classes:style += 'font-weight:600;'
         if name in {'ol', 'ul'}:
             style += 'padding-left:20px;margin:6px 0;'
         children = [value for child in node.children if (value := convert(child)) is not None]
