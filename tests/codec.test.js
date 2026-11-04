@@ -18,3 +18,9 @@ test('bundled native codec runs without Node require, Buffer, process, crypto or
  const result=vm.runInContext("JSON.stringify(module.exports.renderOxford([{word:'demo',html:'<chn>中文🙂</chn>'}]))",context);
  assert.ok(result.includes('中文🙂'));assert.ok(!result.includes('Buffer'));
 });
+
+test('related links use the complete 256-character query contract and preserve long multiword targets',()=>{
+ const codec=require('../miniprogram/vendor/codec'),long='original '.repeat(12).trim(),limit='a'.repeat(256);
+ const result=codec.renderOxford([{word:'demo',html:`<a href="entry://${encodeURIComponent(long)}#sense">long phrase</a><a href="dic://${limit}">limit</a><a href="bword://${limit}a">too long</a><a href="entry://">empty</a><a href="entry://@asset">internal</a>`}]);
+ assert.deepEqual(result.related,[long,limit]);
+});

@@ -97,6 +97,28 @@ test('large reverse searches batch metadata with bounded concurrency and share t
     assert.equal(Array.from(readCounts).find(([name])=>name.endsWith('lengths.bin'))[1],1);
   }finally{await pack.remove();}
 });
+test('reverse pagination reaches every unique word, ignores false positives, and retries a failed read without losing its cursor',async()=>{
+  const folder=path.join(temp,'reverse-pages');fs.mkdirSync(folder);const source=path.join(folder,'source.db');
+  let result=spawnSync('python',[path.join(project,'tests/search_fixture.py'),source,'81','--with-duplicates'],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  result=spawnSync('python',[path.join(project,'scripts/build_offline_pack.py'),'--database',source,'--output',path.join(folder,'pack.zip')],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  const report=JSON.parse(fs.readFileSync(path.join(folder,'offline-pack-verification.json'),'utf8'));
+  try{
+    await pack.install(report.volumes.map(row=>path.join(folder,row.name)));
+    const first=await pack.lookup('索引检索测试');assert.equal(first.matches.length,40);assert.ok(Number.isInteger(first.nextCursor));
+    const read=mock.read;let failed=false;
+    mock.read=o=>{if(!failed){failed=true;o.fail({errMsg:'original transient read failure'});}else read(o);};
+    await assert.rejects(pack.lookup('索引检索测试',{cursor:first.nextCursor}),/transient/);mock.read=read;
+    const second=await pack.lookup('索引检索测试',{cursor:first.nextCursor});assert.equal(second.matches.length,40);
+    const third=await pack.lookup('索引检索测试',{cursor:second.nextCursor});assert.equal(third.matches.length,1);assert.equal(third.nextCursor,null);
+    const words=[...first.matches,...second.matches,...third.matches].map(row=>row.word);
+    assert.deepEqual(words,Array.from({length:81},(_,i)=>'indexed-'+String(i).padStart(5,'0')));
+    assert.equal(new Set(words.map(x=>x.toLowerCase())).size,81);
+    assert.deepEqual((await pack.lookup('索引检索测试',{cursor:0})).matches,first.matches);
+    pack._reset();assert.deepEqual((await pack.lookup('索引检索测试',{cursor:first.nextCursor})).matches,second.matches);
+    for(const cursor of [-1,1.5,'40',Number.MAX_SAFE_INTEGER])await assert.rejects(pack.lookup('索引检索测试',{cursor}),/页码/);
+  }finally{await pack.remove();}
+});
+
 test('real private pack: import all volumes, full native lookup, aliases, Chinese reverse lookup, and removal', async t => {
   const reportFile = path.join(output, 'offline-pack-verification.json');
   if (!fs.existsSync(reportFile)) { t.skip('Private generated pack is absent'); return; }

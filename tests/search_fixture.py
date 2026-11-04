@@ -18,7 +18,7 @@ ENTRIES = [
 ]
 
 
-def build_source(path, extra_rows=0):
+def build_source(path, extra_rows=0, with_duplicates=False):
     with closing(sqlite3.connect(path)) as db:
         db.executescript('CREATE TABLE metadata(key TEXT,value TEXT); CREATE TABLE entries(id INTEGER PRIMARY KEY,key TEXT,compact TEXT,word TEXT,body BLOB,target TEXT);')
         db.executemany('INSERT INTO metadata VALUES (?,?)', [('source_sha256', hashlib.sha256(b'Original search examples').hexdigest()), ('edition', 'original-test')])
@@ -29,8 +29,13 @@ def build_source(path, extra_rows=0):
             word='indexed-%05d'%index
             html='<deft><chn>索引检索测试</chn></deft><custom>'+word+'</custom>'
             db.execute('INSERT INTO entries VALUES (?,?,?,?,?,NULL)', (9+index,word,word.replace('-',''),word,zlib.compress(html.encode('utf-8'))))
+        if with_duplicates:
+            for offset,(word,html) in enumerate([
+                ('INDEXED-00039','<deft><chn>索引检索测试</chn></deft><custom>Another body for the same word.</custom>'),
+                ('aa-not-a-match','<deft><chn>索引 引检 检索 索测 测试</chn></deft>')]):
+                db.execute('INSERT INTO entries VALUES (?,?,?,?,?,NULL)',(9+extra_rows+offset,word.lower(),word.replace('-','').lower(),word,zlib.compress(html.encode('utf-8'))))
         db.commit()
 
 
 if __name__ == '__main__':
-    build_source(Path(sys.argv[1]), int(sys.argv[2]) if len(sys.argv)>2 else 0)
+    build_source(Path(sys.argv[1]), int(sys.argv[2]) if len(sys.argv)>2 else 0, '--with-duplicates' in sys.argv)

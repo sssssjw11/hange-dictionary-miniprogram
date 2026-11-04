@@ -60,7 +60,7 @@ export function renderOxford(pages) {
       if (classes.has('audio_play_button')) return null;
       const href = (node.attribs || {}).href || '';
       if (/^sound:/i.test(href)) return null;
-      if (/^(entry|dic|bword):\/\//i.test(href)) { try { const word = decodeURIComponent(href.split('://')[1].split('#')[0]); if (word.length <= 80 && !word.startsWith('@')) related.push(word); } catch (_) {} }
+      if (/^(entry|dic|bword):\/\//i.test(href)) { try { const word = decodeURIComponent(href.split('://')[1].split('#')[0]); if (word.length > 0 && word.length <= 256 && !word.startsWith('@')) related.push(word); } catch (_) {} }
       if (classes.has('phons_br') || classes.has('phons_n_am')) {
         const find = current => ((current.attribs || {}).class || '').split(/\s+/).includes('phon') ? text(current) : (current.children || []).map(find).find(Boolean);
         const value = find(node); if (value) phonetics[classes.has('phons_br') ? 'uk' : 'us'] = value;

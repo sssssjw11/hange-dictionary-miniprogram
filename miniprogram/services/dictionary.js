@@ -15,23 +15,23 @@ function request(path, query, timeout) {
     fail() { reject(new Error('未连接到全量词库。可在阅读设置中配置服务地址，或查询内置词条。')); }
   }));
 }
-async function status(force) {
+async function status(force, probeMissing = false) {
   const installed = await offlinePack.status();
   const origin = base();
   const merge = () => Object.assign({}, health, { offline: installed.installed, offlineDefinitions: installed.definitions || 0, offlineError: installed.error || '', oxford: !!health.oxford || installed.installed });
-  if (!force && installed.installed && !health.ready) return merge();
+  if (!force && installed.installed && !health.ready && !probeMissing) return merge();
   if (!force && health.base === origin && Date.now() - health.checked < 30000) return merge();
   try { health = Object.assign(await request('health', {}, 1200), { connected:true,checked: Date.now(), base: origin }); }
   catch (_) { health = { ready: false, connected:false, checked: Date.now(), base: origin }; }
   return merge();
 }
-function local(word) {
+function local(word, cursor = 0) {
   const key = store.key(word), entry = offline.entries[key] || offline.entries[offline.aliases[key]];
   if (entry) return Object.assign({}, entry, { requested: word, source: 'builtin' });
   if (chineseSearch.hasHan(key)) {
     const matches = Object.values(offline.entries).filter(row => (row.zh || '').includes(key) || (row.teaching && JSON.stringify(row.teaching).includes(key))).map(row => ({ word: row.word, meaning: row.zh || (row.teaching || {}).title || '' }));
     if (matches.length === 1) return Object.assign({}, offline.entries[store.key(matches[0].word)], { requested: word, matchedFrom: word, source: 'builtin' });
-    if (matches.length) return { kind: 'matches', requested: word, matches: matches.slice(0, 40), partial: true };
+    if (matches.length) return { kind: 'matches', requested: word, matches: matches.slice(cursor,cursor+40), partial: true, source:'builtin', cursor, nextCursor:cursor+40<matches.length?cursor+40:null };
   }
   return null;
 }
@@ -46,7 +46,7 @@ async function lookup(word) {
       if (packed) { if (packed.kind !== 'entry') return packed; const supplement = local(packed.word) || local(word) || {}; return Object.assign({}, supplement, packed, { teaching: supplement.teaching || null, senses: supplement.senses || [], related: Array.from(new Set((packed.related || []).concat(supplement.related || []))) }); }
     }
     if (stored && stored.kind === 'entry') return Object.assign({}, stored, { source: 'cache', requested: word });
-    const fallback = local(word), state = await status(false);
+    const fallback = local(word), state = await status(false,true);
     if (state.ready) {
       try { const entry = await request('lookup', { q: word }); if (entry.kind === 'entry') cache.put(key, entry); return entry; }
       catch (error) { if (!fallback) throw error; }
@@ -65,4 +65,16 @@ async function suggest(word) {
   if (health.ready && health.base === base()) { try { return (await request('suggest', { q: word }, 1800)).rows; } catch (_) {} }
   return rows;
 }
-module.exports = { lookup, suggest, status, offlineCount: Object.keys(offline.entries).length, reset() { health.checked = 0; } };
+async function matchPage(word,cursor,source){
+  word=String(word||'').trim();
+  if(!word||word.length>256||!chineseSearch.hasHan(word)||!Number.isInteger(cursor)||cursor<0)throw new Error('查询页码无效，请重新查询');
+  if(source==='offline-pack'){
+    const result=await offlinePack.lookup(word,{cursor});
+    if(!result)throw new Error('离线词库已移除，请重新查询');
+    return result;
+  }
+  if(source==='builtin')return local(word,cursor)||{kind:'matches',matches:[],cursor,nextCursor:null,source:'builtin',partial:true};
+  if(source==='service')return request('reverse',{q:word,cursor});
+  throw new Error('当前服务不支持继续翻页，请重新查询或更新服务');
+}
+module.exports = { lookup, matchPage, suggest, status, offlineCount: Object.keys(offline.entries).length, reset() { health.checked = 0; } };

@@ -12,6 +12,7 @@ import unittest
 import zlib
 from urllib.error import HTTPError
 from urllib.request import urlopen
+from urllib.parse import quote
 from http.server import ThreadingHTTPServer
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +27,39 @@ def node_text(nodes):
 
 
 class RendererTest(unittest.TestCase):
+    def test_reverse_pages_reach_all_words_and_deduplicate_across_supplemental_sources(self):
+        sys.path.insert(0,str(ROOT/'scripts'))
+        from build_chinese_index import build
+        from search_fixture import build_source
+        with tempfile.TemporaryDirectory() as temporary:
+            folder=Path(temporary);(folder/'oxford').mkdir();source=folder/'oxford/oxford.db'
+            build_source(source,81,True);build(source,folder/'oxford/chinese.db')
+            with closing(sqlite3.connect(folder/'dictionary.db')) as db:
+                db.executescript('CREATE TABLE entries(key TEXT,word TEXT,phonetic TEXT,zh TEXT,en TEXT,forms TEXT,tags TEXT); CREATE TABLE aliases(key TEXT,lemma TEXT); CREATE TABLE senses(key TEXT,json TEXT);')
+                db.executemany('INSERT INTO entries VALUES (?,?,?,?,?,?,?)',[
+                    ('indexed-00039','INDEXED-00039','','索引检索测试','','',''),
+                    ('supplement-only','supplement-only','','索引检索测试','','','')]);db.commit()
+            engine=Engine(folder);term='索引检索测试';pages=[];cursor=0
+            while True:
+                page=engine.chinese_page(term,cursor);pages.append(page)
+                if page['nextCursor'] is None:break
+                self.assertGreater(page['nextCursor'],cursor);cursor=page['nextCursor']
+            self.assertEqual([len(page['matches']) for page in pages],[40,40,2])
+            self.assertEqual([row['word'] for page in pages for row in page['matches']],['indexed-%05d'%i for i in range(81)]+['supplement-only'])
+            self.assertEqual(engine.lookup(term)['nextCursor'],40)
+            for invalid in [-1,1.5,False,'40',10**9]:
+                with self.assertRaises(ValueError):engine.chinese_page(term,invalid)
+            previous=Handler.engine;Handler.engine=engine;server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
+            thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+            try:
+                base='http://127.0.0.1:'+str(server.server_port)
+                response=json.load(urlopen(base+'/api/reverse?q='+quote(term)+'&cursor=80'))
+                self.assertEqual(response['matches'],pages[-1]['matches']);self.assertIsNone(response['nextCursor'])
+                for suffix in ['&cursor=-1','&cursor=nope']:
+                    with self.assertRaises(HTTPError) as caught:urlopen(base+'/api/reverse?q='+quote(term)+suffix)
+                    self.assertEqual(caught.exception.code,400);caught.exception.close()
+            finally:server.shutdown();server.server_close();thread.join();Handler.engine=previous
+
     def test_character_mixed_case_and_supplementary_queries_use_the_imported_source(self):
         sys.path.insert(0,str(ROOT/'scripts'))
         from build_chinese_index import build
@@ -78,13 +112,15 @@ class RendererTest(unittest.TestCase):
             (folder / 'oxford').mkdir()
             with closing(sqlite3.connect(folder / 'oxford/oxford.db')) as db:
                 db.execute('CREATE TABLE entries(id INTEGER PRIMARY KEY,key TEXT,compact TEXT,word TEXT,body BLOB,target TEXT)')
-                db.execute('INSERT INTO entries VALUES (1,?,?,?,?,NULL)', ('demo', 'demo', 'demo', zlib.compress(b'<div>Complete example entry</div>')))
+                html='<div>Complete example entry</div>'+''.join('<a href="entry://original-%d">Original %d</a>'%(i,i) for i in range(75))
+                db.execute('INSERT INTO entries VALUES (1,?,?,?,?,NULL)', ('demo', 'demo', 'demo', zlib.compress(html.encode())))
                 db.commit()
             engine = Engine(folder)
             self.assertTrue(engine.status()['ready'])
             self.assertEqual(engine.status()['oxfordDefinitions'], 1)
             self.assertEqual(engine.lookup('demo')['kind'], 'entry')
             self.assertTrue(engine.lookup('demo')['oxford']['blocks'])
+            self.assertEqual(len(engine.lookup('demo')['related']),75)
             self.assertEqual(engine.lookup('interpersonal skills')['kind'], 'entry')
             self.assertEqual(engine.suggest('dem')[0]['word'], 'demo')
 

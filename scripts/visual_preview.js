@@ -82,6 +82,21 @@ function write(name, controller, width = 390, fileName = name) {
           write(name,controller,width,fileName);manifest.push({name:name+'-volumes',theme,width,file:fileName+'.html'});
         }
       }
+      if(name==='entry'){
+        const original=JSON.parse(JSON.stringify(controller.data));
+        for(const variant of ['matches','matches-last','matches-error','related']){
+          controller.setData(original);
+          if(variant==='related'){
+            controller._entry.related=Array.from({length:75},(_,index)=>'original related expression '+index);controller.relatedPage(3);
+          }else{
+            controller.setData({entry:null,loading:false,error:'',matchQuery:'中文检索',matchPage:variant==='matches-last'?3:1,matchNextCursor:variant==='matches-last'?null:80,matchLoading:false,matchError:variant==='matches-error'?'读取暂时失败，请重试翻页。':'',matches:Array.from({length:variant==='matches-last'?4:40},(_,index)=>({word:'original expression '+index,meaning:'原创排版示例，包含中文释义和 English explanation，以检查长内容换行。'}))});
+          }
+          for(const width of [320,390,768,1024]){
+            const fileName=name+'-'+variant+'-'+theme+'-'+width;
+            write(name,controller,width,fileName);manifest.push({name:name+'-'+variant,theme,width,file:fileName+'.html'});
+          }
+        }
+      }
       if(name==='notebook'||name==='reader'||name==='annotation'){
         const variants=name==='notebook'?['selecting','group-picker']:name==='reader'?['selection','popup']:['new'];
         for(const variant of variants){

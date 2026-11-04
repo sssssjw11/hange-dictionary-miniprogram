@@ -60,7 +60,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.3.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.4.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -114,9 +114,8 @@ class Engine:
                         result.append({'word': headword, 'meaning': zh})
         return result
 
-    def chinese(self, term):
-        term = normalize(term)
-        result, seen = [], set()
+    def _chinese_rows(self, term):
+        seen = set()
         if self.oxford_chinese:
             grams=query_terms(term, self.oxford_single_character)
             if grams:
@@ -125,25 +124,49 @@ class Engine:
                     index.create_function('hange_rank', 2, meaning_rank, deterministic=True)
                     rows=index.execute('SELECT d.id,d.word,d.brief FROM search JOIN documents d ON d.id=search.rowid WHERE search MATCH ? ORDER BY hange_rank(d.brief,?),length(d.word),d.id',(query,term))
                     for identifier,word,brief in rows:
-                        if word in seen:continue
+                        key=normalize(word)
+                        if key in seen:continue
                         body=source.execute('SELECT body FROM entries WHERE id=?',(identifier,)).fetchone()[0]
                         text=normalize(visible_soup(zlib.decompress(body).decode()).get_text())
-                        if term in text:seen.add(word);result.append({'word':word,'meaning':brief or '原文匹配：'+term})
-                        if len(result)>=40:break
+                        if term in text:
+                            seen.add(key)
+                            yield {'word':word,'meaning':brief or '原文匹配：'+term}
         for word,note in self.teaching.items():
-            if len(result)>=40:break
-            if word not in seen and term in normalize(json.dumps(note,ensure_ascii=False)):
-                seen.add(word);result.append({'word':word,'meaning':note['title']})
+            key=normalize(word)
+            if key not in seen and term in normalize(json.dumps(note,ensure_ascii=False)):
+                seen.add(key)
+                yield {'word':word,'meaning':note['title']}
         if not self.base.is_file():
-            return result[:40]
+            return
         escaped = term.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
         with closing(connect(self.base)) as db:
-            rows = db.execute("SELECT word,zh FROM entries WHERE zh LIKE ? ESCAPE '\\' ORDER BY CASE WHEN zh=? OR zh LIKE ? THEN 0 ELSE 1 END,CASE WHEN substr(zh,1,1)='[' THEN 1 ELSE 0 END,length(word),word LIMIT 40", ('%' + escaped + '%', term, 'n. ' + escaped + '%'))
+            rows = db.execute("SELECT word,zh FROM entries WHERE zh LIKE ? ESCAPE '\\' ORDER BY CASE WHEN zh=? OR zh LIKE ? THEN 0 ELSE 1 END,CASE WHEN substr(zh,1,1)='[' THEN 1 ELSE 0 END,length(word),word", ('%' + escaped + '%', term, 'n. ' + escaped + '%'))
             for word, zh in rows:
-                if word not in seen and len(result) < 40:
-                    seen.add(word)
-                    result.append({'word': word, 'meaning': zh})
-        return result[:40]
+                key=normalize(word)
+                if key not in seen:
+                    seen.add(key)
+                    yield {'word': word, 'meaning': zh}
+
+    @lru_cache(maxsize=128,typed=True)
+    def chinese_page(self, term, cursor=0):
+        term=normalize(term)
+        if not term or len(term)>256 or '\x00' in term or not has_han(term):
+            raise ValueError('请输入包含汉字的中文关键词，最多 256 字')
+        if type(cursor) is not int or not 0<=cursor<=self.counts['base']+self.counts['oxford']+len(self.teaching):
+            raise ValueError('查询页码无效，请重新查询')
+        matches=[];next_cursor=None
+        # Close both read-only connections even when the look-ahead ends early.
+        with closing(self._chinese_rows(term)) as rows:
+            for index,row in enumerate(rows):
+                if index<cursor:continue
+                if len(matches)==40:
+                    next_cursor=cursor+40;break
+                matches.append(row)
+        return {'kind':'matches','requested':term,'matches':matches,'source':'service',
+                'cursor':cursor,'nextCursor':next_cursor,'pageSize':40}
+
+    def chinese(self, term):
+        return self.chinese_page(term)['matches']
 
     @lru_cache(maxsize=128)
     def lookup(self, requested):
@@ -167,11 +190,12 @@ class Engine:
             row = (matched, '', self.teaching[matched]['title'], '', '', '')
         if not row and not pages:
             if has_han(key):
-                matches = self.chinese(key)
-                if len(matches) == 1:
+                page = self.chinese_page(key)
+                matches = page['matches']
+                if len(matches) == 1 and page['nextCursor'] is None:
                     data = dict(self.lookup(matches[0]['word']))
                     return dict(data, requested=requested, matchedFrom=requested)
-                return {'kind': 'matches', 'requested': requested, 'matches': matches}
+                return dict(page,requested=requested)
             return {'kind': 'missing', 'requested': requested, 'suggestions': self.suggest(key)}
         data = dict(zip(['word', 'phonetic', 'zh', 'en', 'formsRaw', 'tagsRaw'], row)) if row else {'word': pages[0][1]}
         if pages:
@@ -199,7 +223,7 @@ class Engine:
         data['brief']=brief
         data['phonetics']=phonetics
         related.extend((data.get('teaching') or {}).get('related', []))
-        data['related'] = list(dict.fromkeys(related))[:60]
+        data['related'] = list(dict.fromkeys(related))
         return data
 
 
@@ -217,7 +241,7 @@ def rich_blocks(html, with_info=False):
         href = anchor.get('href', '')
         if href.lower().startswith(('entry://', 'dic://', 'bword://')):
             word = unquote(href.split('://', 1)[1].split('#', 1)[0])
-            if 0 < len(word) <= 80 and not word.startswith('@'):
+            if 0 < len(word) <= 256 and not word.startswith('@'):
                 related.append(word)
         elif href.lower().startswith('sound:'):
             anchor.decompose()

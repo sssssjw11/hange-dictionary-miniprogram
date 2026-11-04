@@ -32,6 +32,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_audio(self.features.audio(route.path.rsplit('/',1)[1]))
             elif route.path == '/api/lookup':
                 data = self.engine.lookup(query.get('q', [''])[0])
+            elif route.path == '/api/reverse':
+                data = self.engine.chinese_page(query.get('q', [''])[0],int(query.get('cursor',['0'])[0]))
             elif route.path == '/api/suggest':
                 data = {'rows': self.engine.suggest(query.get('q', [''])[0])}
             else:

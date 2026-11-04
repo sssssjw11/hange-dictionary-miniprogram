@@ -6,21 +6,26 @@ const sentences = require('../../services/sentences');
 const study = require('../../services/study');
 const POS = { n: '名词', v: '动词', a: '形容词', r: '副词' };
 Page({
-  data: { loading: true, error: '', matches: [], entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
+  data: { loading: true, error: '', matches: [], matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], relatedTotal:0, relatedPage:0, relatedPages:1, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
   onLoad(options) { let query; try { query = decodeURIComponent(options.q || ''); } catch (_) { query = options.q || ''; } this._query = query; this.load(query); },
   onShow() { ui.apply(this); if (this._entry) this.refreshFavorite(); },
   async load(word) {
     const generation = (this._generation || 0) + 1; this._generation = generation; this._query = word;
-    this._entry = null; this.setData({ loading: true, error: '', matches: [], entry: null });
+    this._entry = null; this._matchCursors=[0]; this._matchTarget=null;
+    this.setData({ loading: true, error: '', matches: [], entry: null, matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'' });
     try {
       const result = await dictionary.lookup(word); if (this._generation !== generation) return;
-      if (result.kind !== 'entry') { if(result.kind==='matches'&&(result.matches||[]).length)try{store.visit(word,'找到 '+result.matches.length+' 个相关词条');}catch(error){ui.error(error);}this._entry = null; this.setData({ loading: false, matches: result.matches || result.suggestions || [], partial: !!result.partial, error:result.hint || (result.kind === 'matches' ? (result.matches.length ? '' : '没有匹配的中文释义，请换个关键词再试。') : '本地词库暂未匹配到，可调整拼写或查询原形。'), matchQuery: word }); return; }
+      if (result.kind !== 'entry') {
+        if(result.kind==='matches'&&(result.matches||[]).length)try{store.visit(word,'找到 '+result.matches.length+(Number.isInteger(result.nextCursor)?'+':'')+' 个相关词条');}catch(error){ui.error(error);}
+        this._entry = null;
+        this.setData({ loading:false, matches:result.matches||result.suggestions||[], partial:!!result.partial, matchSource:result.source||'', matchNextCursor:Number.isInteger(result.nextCursor)?result.nextCursor:null, error:result.hint||(result.kind==='matches'?(result.matches.length?'':'没有匹配的中文释义，请换个关键词再试。'):'本地词库暂未匹配到，可调整拼写或查询原形。'),matchQuery:word });return;
+      }
       this._entry = result;
       const meaning = result.brief || result.zh || (result.teaching || {}).title || '';
       try { store.visit(result.word, meaning); } catch (error) { ui.error(error); }
       const hasOxford = !!(result.oxford && result.oxford.blocks.length), hasTeaching = !!result.teaching;
-      this.setData({ loading: false, entry: { word: result.word, phonetic: result.phonetic || '', phonetics:result.phonetics||(result.oxford||{}).phonetics||{}, zh: result.zh || '', en: result.en || '', forms: result.forms || [], matchedFrom: result.matchedFrom || '', sourceLabel: result.source === 'offline-pack'?'牛津十版 · 全量离线':result.source === 'cache' ? '已缓存 · 可离线重看' : result.source === 'builtin' ? '内置离线词条' : '全量词库', hasOxford, hasTeaching, hasBase:!!(result.zh||result.en), hasExamples:!!((result.oxford||{}).examples||[]).length, hasSenses: !!(result.senses || []).length }, teaching: result.teaching || null, related: result.related || [], source: hasOxford ? 'oxford' : hasTeaching ? 'teaching' : (result.senses||[]).length?'wordnet':'base' });
-      this.refreshFavorite(); this.contentPage(0); wx.setNavigationBarTitle({ title: result.word });
+      this.setData({ loading: false, entry: { word: result.word, phonetic: result.phonetic || '', phonetics:result.phonetics||(result.oxford||{}).phonetics||{}, zh: result.zh || '', en: result.en || '', forms: result.forms || [], matchedFrom: result.matchedFrom || '', sourceLabel: result.source === 'offline-pack'?'牛津十版 · 全量离线':result.source === 'cache' ? '已缓存 · 可离线重看' : result.source === 'builtin' ? '内置离线词条' : '全量词库', hasOxford, hasTeaching, hasBase:!!(result.zh||result.en), hasExamples:!!((result.oxford||{}).examples||[]).length, hasSenses: !!(result.senses || []).length }, teaching: result.teaching || null, source: hasOxford ? 'oxford' : hasTeaching ? 'teaching' : (result.senses||[]).length?'wordnet':'base' });
+      this.refreshFavorite(); this.contentPage(0); this.relatedPage(0); wx.setNavigationBarTitle({ title: result.word });
     } catch (error) { if (this._generation === generation) this.setData({ loading: false, error: error.message }); }
   },
   refreshFavorite() { try { const item = store.favorite(this._entry.word); this.setData({ favorite: !!item,bookNames:item?store.groups().filter(group=>item.groups.includes(group.id)).map(group=>group.name).join(' / '):'',note: item ? item.note : '', noteStatus: item && item.note ? '已保存到本机' : '' }); } catch (error) { ui.error(error); } },
@@ -31,9 +36,31 @@ Page({
     this.setData({ page: index, totalPages, totalItems: rows.length, oxfordBlocks: oxford ? rows.slice(index * size, (index + 1) * size) : [],examples:examples?rows.slice(index*size,(index+1)*size):[],senses: oxford||examples ? [] : rows.slice(index * size, (index + 1) * size).map(row => Object.assign({}, row, { posLabel: POS[row.pos] || row.pos })) });
   },
   onSource(event) { this.setData({ source: ui.dataset(event, 'source') }); this.contentPage(0); },
+  relatedPage(index){
+    const rows=(this._entry||{}).related||[],pages=Math.max(1,Math.ceil(rows.length/24));index=Math.min(Math.max(0,index),pages-1);
+    this.setData({related:rows.slice(index*24,(index+1)*24),relatedPage:index,relatedPages:pages,relatedTotal:rows.length});
+  },
+  onRelatedPrev(){this.relatedPage(this.data.relatedPage-1);wx.pageScrollTo({selector:'#related-start',duration:180});},
+  onRelatedNext(){this.relatedPage(this.data.relatedPage+1);wx.pageScrollTo({selector:'#related-start',duration:180});},
   onPrev() { this.contentPage(this.data.page - 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
   onNext() { this.contentPage(this.data.page + 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
-  onWord(event) { const word = ui.dataset(event); if (word) { this.load(word); wx.pageScrollTo({ scrollTop: 0, duration: 0 }); } },
+  onWord(event) { const word = ui.dataset(event); if (!word||this.data.matchLoading)return;if(!this._entry&&this.data.matches.length){wx.navigateTo({url:'/pages/entry/index?q='+encodeURIComponent(word),fail:()=>ui.error(new Error('暂时无法打开词条，请返回一层后重试'))});return;}return this.load(word).then(()=>wx.pageScrollTo({scrollTop:0,duration:0})); },
+  async matchPage(index,cursor){
+    if(this.data.matchLoading||!Number.isInteger(cursor)||index<0)return;
+    const generation=this._generation;this._matchTarget={index,cursor};this.setData({matchLoading:true,matchError:''});
+    try{
+      const result=await dictionary.matchPage(this.data.matchQuery,cursor,this.data.matchSource);
+      if(this._generation!==generation)return;
+      if(result.kind!=='matches'||!Array.isArray(result.matches))throw new Error('服务返回的查询页无效，请更新服务后重试');
+      this._matchCursors[index]=cursor;
+      this.setData({matches:result.matches,matchPage:index,matchNextCursor:Number.isInteger(result.nextCursor)?result.nextCursor:null});
+      wx.pageScrollTo({selector:'#matches-start',duration:180});
+    }catch(error){if(this._generation===generation)this.setData({matchError:error.message});}
+    finally{if(this._generation===generation)this.setData({matchLoading:false});}
+  },
+  onMatchPrev(){return this.matchPage(this.data.matchPage-1,(this._matchCursors||[])[this.data.matchPage-1]);},
+  onMatchNext(){return this.matchPage(this.data.matchPage+1,this.data.matchNextCursor);},
+  onMatchRetry(){if(this._matchTarget)return this.matchPage(this._matchTarget.index,this._matchTarget.cursor);},
   onRetry() { dictionary.reset(); this.load(this._query); },
   async onFavorite() {
     if (!this._entry) return;

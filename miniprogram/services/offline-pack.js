@@ -60,9 +60,9 @@ async function wordLengths(pack){
   return pack.loadingLengths;
 }
 async function document(pack, id) { const row = await metadata(pack, id); const file = 'parts/' + row[0].toString().padStart(3, '0') + '.bin'; const body = await chunk(pack.root + '/' + file, row[1], row[2]); return { word: row[3], html: codec.strFromU8(codec.unzlibSync(body)) }; }
-async function lookup(word) {
+async function lookup(word, options = {}) {
   const pack = await restore(); if (!pack) return null;
-  const key = store.key(word); if (chineseSearch.hasHan(key)) return chinese(pack, key);
+  const key = store.key(word); if (chineseSearch.hasHan(key)) {const result=await chinese(pack,key,options.cursor===undefined?0:options.cursor);return result.matches.length||result.hint||options.cursor!==undefined?result:null;}
   let ids = await references(pack, key);
   if (!ids.length && pack.manifest.compactIndex) ids = await references(pack, '\x01' + key.replace(/[^\p{L}\p{N}]/gu, ''));
   if (!ids.length) return null;
@@ -70,11 +70,11 @@ async function lookup(word) {
   const rendered = codec.renderOxford(pages);
   return { kind: 'entry', requested: word, word: pages[0].word, matchedFrom:store.key(pages[0].word)!==key?word:'', source: 'offline-pack', oxford: rendered, related: rendered.related, phonetics: rendered.phonetics, brief:rendered.brief };
 }
-async function chinese(pack, term) {
+async function chineseGroups(pack, term) {
   const grams = chineseSearch.queryTerms(term,pack.manifest.chineseSingleCharacter===true);
-  if (!grams.length) return {kind:'matches',requested:term,matches:[],hint:'当前离线索引不支持单字反查，请导入新版词库后重试'};
+  if (!grams.length) return null;
   let candidates = null;
-  for (const gram of grams) { const file = 'zh/' + codec.hashBucket(gram).toString(16).padStart(2, '0') + '.z'; const values = await jsonFile(pack, file, true); const ids = codec.decodeDeltas(values[gram] || ''); if (candidates === null) candidates = ids; else { const set = new Set(ids); candidates = candidates.filter(id => set.has(id)); } if (!candidates.length) return null; }
+  for (const gram of grams) { const file = 'zh/' + codec.hashBucket(gram).toString(16).padStart(2, '0') + '.z'; const values = await jsonFile(pack, file, true); const ids = codec.decodeDeltas(values[gram] || ''); if (candidates === null) candidates = ids; else { const set = new Set(ids); candidates = candidates.filter(id => set.has(id)); } if (!candidates.length) return {groups:[],pages:new Map()}; }
   const lengths = await wordLengths(pack);
   // Group ids by file; bounded batches avoid one native round trip per word.
   const groups=new Map(),ranked=[];
@@ -83,20 +83,46 @@ async function chinese(pack, term) {
   for(let offset=0;offset<shards.length;offset+=8){
     const batches=await Promise.all(shards.slice(offset,offset+8).map(async([shard,ids])=>{
       const values=await jsonFile(pack,'docs/'+shard.toString().padStart(3,'0')+'.json');
-      return ids.map(id=>{const row=values[String(id)];if(!row)throw new Error('词条索引损坏，请重新导入词库');return{id,row,rank:chineseSearch.meaningRank(row[4]||'',term)};});
+      return ids.map(id=>{const row=values[String(id)];if(!row)throw new Error('词条索引损坏，请重新导入词库');return{id,word:row[3],rank:chineseSearch.meaningRank(row[4]||'',term)};});
     }));
     for(const batch of batches)ranked.push(...batch);
   }
   ranked.sort((a,b)=>a.rank-b.rank||lengths[a.id]-lengths[b.id]||a.id-b.id);
-  const matches = [], seen = new Set();
-  for (const {id,row} of ranked) {
-    if (seen.has(store.key(row[3]))) continue;
-    const page = await document(pack, id);
-    const text = store.key(codec.plainText(page.html));
-    if (text.includes(term)) { seen.add(store.key(row[3])); matches.push({ word: row[3], meaning: (pack.manifest.summaryVersion>=2?row[4]:codec.oxfordSummary(page.html))||'原文匹配：'+term }); }
-    if (matches.length >= 40) break;
+  // Retain ids only, not the full metadata/HTML for every matching document.
+  const words=new Map();
+  for(const {id,word} of ranked){const key=store.key(word);if(!words.has(key))words.set(key,[]);words.get(key).push(id);}
+  return {groups:Array.from(words.values()),pages:new Map()};
+}
+async function chinese(pack, term, cursor) {
+  if(!Number.isInteger(cursor)||cursor<0||cursor>pack.manifest.uniqueDocuments)throw new Error('查询页码无效，请重新查询');
+  if(!pack.searches)pack.searches=new Map();
+  let task=pack.searches.get(term);
+  if(task){pack.searches.delete(term);pack.searches.set(term,task);}
+  else{
+    if(pack.searches.size>=2)pack.searches.delete(pack.searches.keys().next().value);
+    task=chineseGroups(pack,term);pack.searches.set(term,task);
   }
-  return matches.length ? { kind: 'matches', requested: term, matches, source: 'offline-pack' } : null;
+  let state;
+  try{state=await task;}catch(error){if(pack.searches.get(term)===task)pack.searches.delete(term);throw error;}
+  if(!state)return {kind:'matches',requested:term,matches:[],source:'offline-pack',cursor,nextCursor:null,hint:'当前离线索引不支持单字反查，请导入新版词库后重试'};
+  if(state.pages.has(cursor))return state.pages.get(cursor);
+  const matches=[];let nextCursor=null;
+  for(let index=cursor;index<state.groups.length;index++){
+    let match=null;
+    for(const id of state.groups[index]){
+      const page=await document(pack,id);
+      if(store.key(codec.plainText(page.html)).includes(term)){
+        const row=await metadata(pack,id);
+        match={word:row[3],meaning:(pack.manifest.summaryVersion>=2?row[4]:codec.oxfordSummary(page.html))||'原文匹配：'+term};break;
+      }
+    }
+    if(!match)continue;
+    if(matches.length===40){nextCursor=index;break;}
+    matches.push(match);
+  }
+  const result={kind:'matches',requested:term,matches,source:'offline-pack',cursor,nextCursor,pageSize:40};
+  if(state.pages.size>=3)state.pages.delete(state.pages.keys().next().value);
+  state.pages.set(cursor,result);return result;
 }
 async function suggest(word){const pack=await restore(),key=store.key(word);if(!pack||!pack.manifest.prefixIndex||!key||chineseSearch.hasHan(key))return [];const first=Array.from(key)[0],file='prefix/'+codec.hashBucket(first).toString(16).padStart(2,'0')+'.json';const items=(await jsonFile(pack,file))[first]||[],rows=[];for(const item of items){if(store.key(item[0]).startsWith(key)){const row=await metadata(pack,item[1]),meaning=pack.manifest.summaryVersion>=2?row[4]:codec.oxfordSummary((await document(pack,item[1])).html);rows.push({word:item[0],meaning});if(rows.length===10)break;}}return rows;}
 async function zipEntries(path) {
