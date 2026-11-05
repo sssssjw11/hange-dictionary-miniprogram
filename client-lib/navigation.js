@@ -1,4 +1,5 @@
 import {emptyLearning,sourceLearning,mergeLearning} from './learning';
+import {wordListReference} from './catalog';
 const ignored=new Set(['script','style','link','meta','base','iframe','object','embed','img','audio','video','source','audio-wr']);
 const classes=node=>new Set(((node.attribs||{}).class||'').split(/\s+/));
 function hidden(node){return node.type==='comment'||ignored.has(node.name)||classes(node).has('audio_play_button')||/^sound:/i.test((node.attribs||{}).href||'');}
@@ -18,7 +19,7 @@ function heading(node,word){
   return null;
 }
 export function navigation(root,blocks,document,word){
-  const anchors=[],contents=[],references=[],localLinks=[],learning=emptyLearning();let position=0;
+  const anchors=[],contents=[],references=[],localLinks=[],wordListLinks=[],learning=emptyLearning();let position=0;
   function visit(node){
     if(hidden(node))return;
     if(node.type==='text'){position+=node.data.length;return;}
@@ -32,6 +33,7 @@ export function navigation(root,blocks,document,word){
       else if(/^(entry|dic|bword):\/\//i.test(href)){
         const target=href.split('://')[1],hash=target.indexOf('#'),word=decodeURIComponent(hash<0?target:target.slice(0,hash)),anchor=hash<0?'':decodeURIComponent(target.slice(hash+1));
         if(word&&word.length<=256&&!word.startsWith('@'))references.push({word,anchor,label:excerpt(sourceText(node))||word});
+        else{const list=wordListReference(word);if(list)wordListLinks.push(list);}
       }
     }catch(_){}
     if(c.has('phons_br'))position+=2;if(c.has('phons_n_am'))position+=2;
@@ -46,7 +48,7 @@ export function navigation(root,blocks,document,word){
     while(left<right){const middle=(left+right)>>>1;if(ends[middle]>marker.position)right=middle;else left=middle+1;}
     return Object.assign({},marker,{blockIndex:left,offset:marker.position-(left?ends[left-1]:0)});
   }
-  return{anchors:anchors.map(locate),contents:contents.map(locate),references,localLinks,learning};
+  return{anchors:anchors.map(locate),contents:contents.map(locate),references,localLinks,learning,wordListLinks};
 }
 export function nodeLength(node){return node.type==='text'?node.text.length:(node.children||[]).reduce((sum,child)=>sum+nodeLength(child),0);}
 function splitNodes(nodes,offset){

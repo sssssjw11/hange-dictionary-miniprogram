@@ -4,6 +4,15 @@ function text(node){if(ignored.has(node.name))return '';return node.type==='text
 function find(node,test){if(ignored.has(node.name))return null;if(test(node))return node;for(const child of node.children||[]){const hit=find(child,test);if(hit)return hit;}return null;}
 const hasClass=(node,name)=>((node.attribs||{}).class||'').split(/\s+/).includes(name);
 const human=value=>value.replace(/[_-]+/g,' ').replace(/^./,char=>char.toUpperCase());
+export function wordListReference(word){
+  if(typeof word!=='string'||word.length>256||/[\x00-\x1f]/.test(word))return null;
+  const core=/^@ox(3000|5000)(?:&level=([abc][12]))?$/.exec(word);
+  if(core){const level=core[2]||'',size=core[1]==='3000'&&level==='c1'?'5000':core[1];if(level==='c2')return null;return{id:'ox'+size+':'+(level||'all'),name:'牛津'+size+' · '+(level?level.toUpperCase():'全部')};}
+  const opal=/^@opal_(written|spoken)(?:&level=sublist_(\d+))?$/.exec(word);
+  if(opal){const part=Number(opal[2]||0);if(opal[2]&&(!part||part>(opal[1]==='written'?12:6)))return null;return{id:'opal:'+opal[1]+':'+(part?'sublist_'+part:'all'),name:'OPAL 学术'+(opal[1]==='written'?'书面语':'口语')+' · '+(part?'词汇分表 '+part:'全部')};}
+  const topic=/^@topic_([a-z0-9][a-z0-9_-]*?)(?:_level=([abc][12]))?$/.exec(word);
+  return topic?{id:'topic:'+topic[1]+':'+(topic[2]||'all'),name:human(topic[1])+' · '+(topic[2]?topic[2].toUpperCase():'全部')}:null;
+}
 export function parseWordList(html){
   const result=[];
   function visit(node){
@@ -25,12 +34,12 @@ export function parseWordList(html){
   visit(parseDocument(html,{decodeEntities:true}));return result;
 }
 export function opalWordListFields(rows){
-  const result={written:[],spoken:[],writtenPhrases:false,spokenPhrases:false};
+  const result={written:[],spoken:[],writtenPhrases:false,spokenPhrases:false,writtenCategories:[],spokenCategories:[]};
   for(const row of rows)for(const type of ['written','spoken']){
     const part=row.fields['data-opal_'+type];if(part&&!result[type].includes(part))result[type].push(part);
-    if(row.fields['data-opal_'+type+'_phrases'])result[type+'Phrases']=true;
+    const category=row.fields['data-opal_'+type+'_phrases'];if(category){result[type+'Phrases']=true;if(!result[type+'Categories'].includes(category))result[type+'Categories'].push(category);}
   }
-  for(const type of ['written','spoken'])result[type].sort((a,b)=>Number(a.split('_').pop())-Number(b.split('_').pop()));
+  for(const type of ['written','spoken']){result[type].sort((a,b)=>Number(a.split('_').pop())-Number(b.split('_').pop()));result[type+'Categories'].sort();}
   return result;
 }
 export function describeWordLists(words,opal={}){
@@ -44,6 +53,7 @@ export function describeWordLists(words,opal={}){
     if(parts.length||opal[type+'Phrases'])result.push({id:'opal:'+type+':all',name:label+' · 全部',group:'学术词表',sourceKey:opalSource,column:'data-opal_'+type,kind:'opal',value:''});
     if(opal[type+'Phrases'])result.push({id:'opal:'+type+':phrases',name:label+' · 短语',group:'学术词表',sourceKey:opalSource,column:'data-opal_'+type+'_phrases',kind:'opal',value:''});
     for(const part of parts)result.push({id:'opal:'+type+':'+part,name:label+' · 词汇分表 '+part.split('_').pop(),group:'学术词表',sourceKey:opalSource,column:'data-opal_'+type,kind:'opal',value:part});
+    for(const category of opal[type+'Categories']||[])result.push({id:'opal:'+type+':phrase:'+category,name:label+' · '+human(category),group:'学术短语分类',sourceKey:opalSource,column:'data-opal_'+type+'_phrases',kind:'opal',value:category});
   }
   for(const word of words){const match=/^@topic_(.+?)(?:_level=([abc][12]))?$/.exec(word);if(match)result.push({id:'topic:'+match[1]+':'+(match[2]||'all'),name:human(match[1])+' · '+(match[2]?match[2].toUpperCase():'全部'),group:'牛津主题',sourceKey:word,column:'',value:'',kind:'topic'});}
   return result;

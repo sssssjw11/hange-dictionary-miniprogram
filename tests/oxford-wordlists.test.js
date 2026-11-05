@@ -13,7 +13,37 @@ test('Oxford list readers preserve records and select core levels, OPAL words an
  assert.equal(select('ox5000:c1').rows[0].word,'complex');assert.equal(select('ox5000:c1').rows[0].level,'C1');
  assert.equal(select('opal:written:sublist_1').rows[0].word,'analysis');assert.equal(select('opal:written:phrases').rows[0].relatedWord,'example');
  assert.equal(select('opal:written:all').sourceRecords,2);assert.equal(select('opal:spoken:all').sourceRecords,1);
+ assert.equal(select('opal:written:phrase:giving_examples').rows[0].word,'for example');
+ assert.equal(catalog.find(item=>item.id==='opal:written:phrase:giving_examples').group,'学术短语分类');
  assert.ok(catalog.some(item=>item.id==='topic:art:all'));
+});
+
+test('entry list links resolve known Oxford targets without mixing them with dictionary references or body offsets',()=>{
+ const html='<div class="entry"><h1 class="headword">demo</h1><a href="entry://@ox5000&amp;level=b2">core</a><a href="entry://%40topic_animals_level=a1">Animals</a><a href="entry://@opal_spoken&amp;level=sublist_2">OPAL S</a><a href="entry://@asset">asset</a><a href="https://example.invalid/@topic_external">external</a><a href="entry://other#sense">Other</a><li class="sense" id="last" sensenum="2"><deft>tail</deft></li><script><a href="entry://@topic_ignored">ignored</a></script></div>';
+ const result=codec.renderOxford([{word:'demo',html},{word:'demo',html}]);
+ assert.deepEqual(result.wordListLinks.map(row=>row.id),['ox5000:b2','topic:animals:a1','opal:spoken:sublist_2']);
+ assert.equal(result.wordListVersion,1);assert.deepEqual(result.references,[{word:'other',anchor:'sense',label:'Other'}]);
+ assert.equal(codec.wordListReference('@ox3000&level=c1').id,'ox5000:c1');
+ for(const word of ['@asset','@ox5000&level=c2','@opal_spoken&level=sublist_7','@topic_animals<script>'])assert.equal(codec.wordListReference(word),null);
+ const last=result.contents.find(row=>row.id==='last'),focus=codec.focusOxford(result,last);
+ const text=nodes=>nodes.map(node=>node.type==='text'?node.text:text(node.children||[])).join('');
+ assert.ok(text(focus.blocks[focus.index].nodes).startsWith('2. tail'));
+});
+
+test('old cached entries can fetch source list links while retaining a draft typed during refresh',async()=>{
+ const dictionary=require('../miniprogram/services/dictionary'),lookup=dictionary.lookup;let release,definition,destination;
+ const old={kind:'entry',word:'old-word',source:'cache',oxford:{navVersion:1,blocks:[{id:'old',nodes:[{type:'text',text:'Cached entry'}]}]}};
+ const fresh={kind:'entry',word:'old-word',source:'service',oxford:codec.renderOxford([{word:'old-word',html:'<div class="entry"><h1 class="headword">old-word</h1><a href="entry://@topic_animals_level=a1">Animals</a></div>'}])};
+ dictionary.lookup=(word,options)=>options&&options.refresh?new Promise(resolve=>{release=resolve;}):Promise.resolve(old);
+ global.Page=value=>{definition=value;};wx.setNavigationBarTitle=()=>{};wx.pageScrollTo=()=>{};wx.navigateTo=value=>{destination=value.url;};
+ delete require.cache[require.resolve('../miniprogram/pages/entry/index')];require('../miniprogram/pages/entry/index');
+ const page={data:JSON.parse(JSON.stringify(definition.data)),setData(value,callback){Object.assign(this.data,value);if(callback)callback();}};
+ for(const [key,value] of Object.entries(definition))if(typeof value==='function')page[key]=value.bind(page);
+ try{await page.load('old-word');const task=page.onWordLists();assert.equal(page.data.wordListsLoading,true);page.onNote({detail:{value:'Keep my unsaved draft'}});release(fresh);await task;
+  assert.equal(page.data.wordListsOpen,true);assert.equal(page.data.wordListsLoading,false);assert.equal(page.data.wordListTotal,1);
+  assert.equal(page.data.note,'Keep my unsaved draft');assert.equal(page.data.noteStatus,'尚未保存');
+  page.onWordListLink({currentTarget:{dataset:{index:0}}});assert.equal(destination,'/pages/wordlist/index?oxford=topic%3Aanimals%3Aa1');
+ }finally{dictionary.lookup=lookup;page.onUnload();}
 });
 
 test('adding a source list keeps whole phrases, deduplicates and reuses existing review progress',()=>{

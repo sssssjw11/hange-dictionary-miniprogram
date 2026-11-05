@@ -98,7 +98,7 @@ Vosk 模型来自 [官方模型清单](https://alphacephei.com/vosk/models)；OC
 | `GET /api/health` | 词库、版本及中文索引状态 |
 | `GET /api/suggest?q=` | 前缀联想 |
 | `GET /api/lookup?q=` | 完整正文、分义、例句、音标、全部关联词；中文多结果含后续游标 |
-| `GET /api/wordlists` | 从已导入牛津读取等级、主题与 OPAL 词表目录 |
+| `GET /api/wordlists` | 从已导入牛津读取等级、主题、OPAL 词汇分表及短语分类目录 |
 | `GET /api/wordlist?id=` | 读取目录中选定词表，保留词性、级别与相关词；客户端分页显示 |
 | `GET /api/supplement?q=` | 当前原词头的简释、词形、WordNet 和原创说明；不含牛津正文 |
 | `GET /api/reverse?q=&cursor=` | 中文反查每页 40 条；返回 `nextCursor`，为 `null` 表示结束 |

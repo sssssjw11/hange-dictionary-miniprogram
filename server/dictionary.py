@@ -66,7 +66,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.9.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.10.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -291,7 +291,7 @@ class Engine:
                 data['forms'].append({'label': labels[code], 'word': word})
         data['tags'] = (data.pop('tagsRaw', '') or '').split()
         blocks, related, examples, phonetics, brief = [], [], [], {}, ''
-        anchors=[];contents=[];references=[];local_links=[];learning=empty_learning()
+        anchors=[];contents=[];references=[];local_links=[];word_list_links=[];learning=empty_learning()
         for document,(identifier, headword, html) in enumerate(pages):
             first_block=len(blocks)
             rendered, links, info = rich_blocks(html, with_info=True,word=headword)
@@ -308,11 +308,15 @@ class Engine:
                     if name=='contents':item['key']=str(document)+'-'+str(ordinal)
                     target.append(item)
             references.extend(info['references']);local_links.extend(dict(item,document=document) for item in info['localLinks'])
+            word_list_links.extend(info['wordListLinks'])
         seen_references=set();unique_references=[]
         for item in references:
             key=(item['word'],item['anchor'])
             if key not in seen_references:seen_references.add(key);unique_references.append(item)
-        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'localLinks':local_links,'learningVersion':1,'learning':learning}
+        list_ids=set();unique_list_links=[]
+        for item in word_list_links:
+            if item['id'] not in list_ids:list_ids.add(item['id']);unique_list_links.append(item)
+        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'localLinks':local_links,'learningVersion':1,'learning':learning,'wordListVersion':1,'wordListLinks':unique_list_links}
         data['brief']=brief
         data['phonetics']=phonetics
         related.extend((data.get('teaching') or {}).get('related', []))

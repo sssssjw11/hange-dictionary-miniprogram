@@ -12,13 +12,13 @@ function entryView(result){
   return {word:result.word,phonetic:result.phonetic||'',phonetics:result.phonetics||oxford.phonetics||{},zh:result.zh||'',en:result.en||'',forms:result.forms||[],learningTags:learning.badges(oxford.learning),matchedFrom:result.referenceLabel?'':result.matchedFrom||'',sourceLabel:result.source==='offline-pack'?'牛津十版 · 全量离线':result.source==='cache'?'已缓存 · 可离线重看':result.source==='builtin'?'内置离线词条':'全量词库',hasOxford,hasContents:hasOxford&&(!!(oxford.contents||[]).length||!oxford.navVersion),hasTeaching:!!result.teaching,hasBase:!!(result.zh||result.en),hasExamples:!!(oxford.examples||[]).length,hasSenses:!!(result.senses||[]).length};
 }
 Page({
-  data: { loading: true, error: '', matches: [], resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], referenceRows:[], relatedTotal:0, relatedPage:0, relatedPages:1, contentsOpen:false,contentsLoading:false,contentsPage:0,contentsPages:1,contentsTotal:0,contentsRows:[],localJumpRows:[],focusLabel:'',focusError:'',referenceLoading:false, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
+  data: { loading: true, error: '', matches: [], resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], referenceRows:[], relatedTotal:0, relatedPage:0, relatedPages:1, contentsOpen:false,contentsLoading:false,contentsPage:0,contentsPages:1,contentsTotal:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
   onLoad(options) { let query,anchor;try{query=decodeURIComponent(options.q||'');}catch(_){query=options.q||'';}try{anchor=decodeURIComponent(options.anchor||'');}catch(_){anchor=options.anchor||'';}this._query=query;this.load(query,{anchor,reference:options.ref==='1',label:ui.decode(options.label).slice(0,256)}); },
   onShow() { ui.apply(this); if (this._entry) this.refreshFavorite(); },
   async load(word,options={}) {
     const generation = (this._generation || 0) + 1; this._generation = generation; this._query = word;
     this._entry = null; this._matchCursors=[0]; this._matchTarget=null;this._focus=null;this._requestedAnchor=String(options.anchor||'').slice(0,1024);
-    this.setData({ loading: true, error: '', matches: [], entry: null, resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'',supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',contentsOpen:false,contentsLoading:false,contentsPage:0,contentsRows:[],localJumpRows:[],focusLabel:'',focusError:'',referenceLoading:false });
+    this.setData({ loading: true, error: '', matches: [], entry: null, resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'',supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',contentsOpen:false,contentsLoading:false,contentsPage:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false });
     try {
       const result = options.entry||await dictionary.lookup(word); if (this._generation !== generation) return;
       if (result.kind !== 'entry') {
@@ -32,8 +32,9 @@ Page({
       const view=entryView(this._entry);
       this.setData({loading:false,entry:view,teaching:result.teaching||null,source:view.hasOxford?'oxford':view.hasTeaching?'teaching':view.hasSenses?'wordnet':'base',supplementState:result.supplementState||'',supplementNote:result.supplementState==='cache'?'补充词典已缓存，可离线查阅':'简释 · 英语分义 · 用法说明'});
       this.refreshFavorite();if(options.draft&&store.key(options.draft.word)===store.key(result.word))this.setData({note:options.draft.note,noteStatus:'尚未保存'});
-      this.contentPage(0); this.relatedPage(0);this.contentsPage(0);if(this._requestedAnchor)this.focusAnchor(this._requestedAnchor,options.label);wx.setNavigationBarTitle({ title: result.word });
+      this.contentPage(0); this.relatedPage(0);this.contentsPage(0);this.wordListsPage(0);if(this._requestedAnchor)this.focusAnchor(this._requestedAnchor,options.label);wx.setNavigationBarTitle({ title: result.word });
       if(options.openContents)this.setData({contentsOpen:true},()=>wx.pageScrollTo({selector:'#entry-contents',duration:180}));
+      if(options.openWordLists)this.setData({wordListsOpen:true},()=>wx.pageScrollTo({selector:'#entry-wordlists',duration:180}));
     } catch (error) { if (this._generation === generation) this.setData({ loading: false, error: error.message }); }
   },
   async onMoreDictionaries(){
@@ -73,7 +74,7 @@ Page({
     this.setData({contentsPage:index,contentsPages:pages,contentsTotal:rows.length,contentsRows:rows.slice(index*24,(index+1)*24).map((row,i)=>Object.assign({},row,{index:index*24+i})),localJumpRows});
   },
   async onContents(){
-    if(this.data.contentsLoading||!this._entry)return;
+    if(this.data.contentsLoading||this.data.wordListsLoading||!this._entry)return;
     if(!(this._entry.oxford||{}).navVersion){
       const generation=this._generation,word=this._entry.word;this.setData({contentsLoading:true,focusError:''});
       try{const result=await dictionary.lookup(word,{refresh:true});if(this._generation!==generation)return;
@@ -107,6 +108,28 @@ Page({
   },
   onRelatedPrev(){this.relatedPage(this.data.relatedPage-1);wx.pageScrollTo({selector:'#related-start',duration:180});},
   onRelatedNext(){this.relatedPage(this.data.relatedPage+1);wx.pageScrollTo({selector:'#related-start',duration:180});},
+  wordListsPage(index){
+    const rows=(((this._entry||{}).oxford||{}).wordListLinks||[]),pages=Math.max(1,Math.ceil(rows.length/12));index=Math.min(Math.max(0,index),pages-1);
+    this.setData({wordListPage:index,wordListPages:pages,wordListTotal:rows.length,wordListRows:rows.slice(index*12,(index+1)*12).map((row,i)=>Object.assign({},row,{index:index*12+i}))});
+  },
+  async onWordLists(){
+    if(this.data.wordListsLoading||this.data.contentsLoading||!this._entry)return;
+    if(!(this._entry.oxford||{}).wordListVersion){
+      const generation=this._generation,word=this._entry.word;this.setData({wordListsLoading:true,wordListsError:''});
+      try{const result=await dictionary.lookup(this._query||word,{refresh:true});if(this._generation!==generation)return;
+        if(result.kind!=='entry'||!result.oxford||!result.oxford.wordListVersion)throw new Error('当前缓存尚未包含词表链接，请连接新版词库服务后重试。');
+        const draft=this.data.noteStatus==='尚未保存'?{word,note:this.data.note}:null;
+        await this.load(this._query||word,{entry:result,draft,openWordLists:true,anchor:this._requestedAnchor,reference:!!this._entry.referenceLabel,label:this._entry.referenceLabel||''});
+      }catch(error){if(this._generation===generation)this.setData({wordListsOpen:true,wordListsError:error.message});}
+      finally{if(this._generation===generation)this.setData({wordListsLoading:false});}
+      return;
+    }
+    this.wordListsPage(this.data.wordListPage);this.setData({wordListsOpen:!this.data.wordListsOpen,wordListsError:''},()=>{if(this.data.wordListsOpen)wx.pageScrollTo({selector:'#entry-wordlists',duration:180});});
+  },
+  onWordListLink(event){const row=((((this._entry||{}).oxford||{}).wordListLinks)||[])[Number(ui.dataset(event,'index'))];if(row)wx.navigateTo({url:'/pages/wordlist/index?oxford='+encodeURIComponent(row.id),fail:()=>ui.error(new Error('暂时无法打开词表，请返回一层后重试'))});},
+  onAllWordLists(){wx.navigateTo({url:'/pages/wordlist/index?source=oxford'});},
+  onWordListsPrev(){this.wordListsPage(this.data.wordListPage-1);wx.pageScrollTo({selector:'#entry-wordlists',duration:180});},
+  onWordListsNext(){this.wordListsPage(this.data.wordListPage+1);wx.pageScrollTo({selector:'#entry-wordlists',duration:180});},
   onPrev() { this.contentPage(this.data.page - 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
   onNext() { this.contentPage(this.data.page + 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
   onWord(event) { const word = ui.dataset(event); if (!word||this.data.matchLoading)return;if(!this._entry&&this.data.matches.length){wx.navigateTo({url:'/pages/entry/index?q='+encodeURIComponent(word),fail:()=>ui.error(new Error('暂时无法打开词条，请返回一层后重试'))});return;}return this.load(word).then(()=>wx.pageScrollTo({scrollTop:0,duration:0})); },

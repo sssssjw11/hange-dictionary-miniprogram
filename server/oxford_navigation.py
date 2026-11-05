@@ -3,6 +3,7 @@ from bisect import bisect_right
 import re
 from urllib.parse import unquote
 from bs4 import Comment, NavigableString, Tag
+from wordlists import reference as word_list_reference
 
 IGNORED={'script','style','link','meta','base','iframe','object','embed','img','audio','video','source','audio-wr'}
 LEARNING_FIELDS=('levels','extendedLevels','lists','extendedLists')
@@ -61,7 +62,7 @@ def heading(node,word):
     if 'phrasal_verb_links' in c:return '短语动词',source_text(by_class('heading') or find(node,lambda item:item.name=='h2')) or 'Phrasal Verbs'
     return None
 def navigation(soup,blocks,word=''):
-    anchors=[];contents=[];references=[];local=[];position=0;learning=empty_learning()
+    anchors=[];contents=[];references=[];local=[];word_lists=[];position=0;learning=empty_learning()
     def visit(node,root=False):
         nonlocal position
         if hidden(node):return
@@ -78,6 +79,9 @@ def navigation(soup,blocks,word=''):
             elif re.match(r'^(entry|dic|bword)://',href,re.I):
                 target=href.split('://',1)[1];target_word,separator,anchor=target.partition('#');target_word=decode(target_word);anchor=decode(anchor) if separator else ''
                 if target_word and units(target_word)<=256 and not target_word.startswith('@'):references.append({'word':target_word,'anchor':anchor,'label':excerpt(source_text(node)) or target_word})
+                else:
+                    word_list=word_list_reference(target_word)
+                    if word_list:word_lists.append(word_list)
         except (ValueError,UnicodeDecodeError):pass
         if not root:
             if 'phons_br' in classes(node):position+=2
@@ -91,4 +95,4 @@ def navigation(soup,blocks,word=''):
     for marker in anchors+contents:
         index=min(bisect_right(ends,marker['position']),len(ends)-1)
         marker.update(blockIndex=index,offset=marker['position']-(ends[index-1] if index>0 else 0))
-    return {'anchors':anchors,'contents':contents,'references':references,'localLinks':local,'learning':learning}
+    return {'anchors':anchors,'contents':contents,'references':references,'localLinks':local,'learning':learning,'wordListLinks':word_lists}

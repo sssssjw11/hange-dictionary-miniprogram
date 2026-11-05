@@ -4,7 +4,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { navigation, sensePrefix } from './navigation';
 import {emptyLearning,mergeLearning} from './learning';
 export { focusOxford } from './navigation';
-export {parseWordList,opalWordListFields,describeWordLists,selectWordList} from './catalog';
+export {parseWordList,opalWordListFields,describeWordLists,selectWordList,wordListReference} from './catalog';
 
 export { unzlibSync, strFromU8, sha256 };
 export function utf8Length(value) {
@@ -49,7 +49,7 @@ function summaryParts(root) {
 function summary(parts) { return Array.from((parts.definitions.length?parts.definitions:parts.fallback.slice(0,1)).join(' / ')).slice(0,240).join(''); }
 export function oxfordSummary(html) { return summary(summaryParts(parseDocument(html,{decodeEntities:true}))); }
 export function renderOxford(pages) {
-  const blocks = [], related = [], phonetics = {}, examples = [], parts={definitions:[],fallback:[]},anchors=[],contents=[],references=[],localLinks=[],learning=emptyLearning(); let chineseNodes = 0, senses = 0;
+  const blocks = [], related = [], phonetics = {}, examples = [], parts={definitions:[],fallback:[]},anchors=[],contents=[],references=[],localLinks=[],wordListLinks=[],learning=emptyLearning(); let chineseNodes = 0, senses = 0;
   pages.forEach((page, pageIndex) => {
     const root = parseDocument(page.html, { decodeEntities: true });
     const firstBlock=blocks.length;
@@ -115,8 +115,9 @@ export function renderOxford(pages) {
     const nav=navigation(root,blocks.slice(firstBlock),pageIndex,page.word||'');
     mergeLearning(learning,nav.learning);
     for(const key of ['anchors','contents'])for(const item of nav[key])if(item.blockIndex>=0)item.blockIndex+=firstBlock;
-    anchors.push(...nav.anchors);contents.push(...nav.contents);references.push(...nav.references);localLinks.push(...nav.localLinks);
+    anchors.push(...nav.anchors);contents.push(...nav.contents);references.push(...nav.references);localLinks.push(...nav.localLinks);wordListLinks.push(...nav.wordListLinks);
   });
   const seen=new Set(),uniqueReferences=references.filter(row=>{const key=row.word+'\0'+row.anchor;if(seen.has(key))return false;seen.add(key);return true;});
-  return { title: '牛津高阶英汉双解 · 第10版', documents: pages.length, blocks, related: Array.from(new Set(related)), phonetics, chineseNodes, senses, examples, brief:summary(parts),navVersion:1,anchors,contents,references:uniqueReferences,localLinks,learningVersion:1,learning };
+  const listIds=new Set(),uniqueListLinks=wordListLinks.filter(row=>{if(listIds.has(row.id))return false;listIds.add(row.id);return true;});
+  return { title: '牛津高阶英汉双解 · 第10版', documents: pages.length, blocks, related: Array.from(new Set(related)), phonetics, chineseNodes, senses, examples, brief:summary(parts),navVersion:1,anchors,contents,references:uniqueReferences,localLinks,learningVersion:1,learning,wordListVersion:1,wordListLinks:uniqueListLinks };
 }

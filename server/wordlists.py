@@ -10,6 +10,26 @@ def human(value):
     return value[:1].upper()+value[1:]
 
 
+def reference(word):
+    if not isinstance(word,str) or len(word)>256 or re.search(r'[\x00-\x1f]',word):return None
+    core=re.fullmatch(r'@ox(3000|5000)(?:&level=([abc][12]))?',word)
+    if core:
+        size,level=core.groups();level=level or ''
+        if level=='c2':return None
+        if size=='3000' and level=='c1':size='5000'
+        return {'id':'ox'+size+':'+(level or 'all'),'name':'牛津'+size+' · '+(level.upper() if level else '全部')}
+    opal=re.fullmatch(r'@opal_(written|spoken)(?:&level=sublist_(\d+))?',word)
+    if opal:
+        kind,part=opal.groups();number=int(part or 0)
+        if part and not 0<number<=(12 if kind=='written' else 6):return None
+        return {'id':'opal:'+kind+':'+('sublist_'+str(number) if number else 'all'),'name':'OPAL 学术'+('书面语' if kind=='written' else '口语')+' · '+('词汇分表 '+str(number) if number else '全部')}
+    topic=re.fullmatch(r'@topic_([a-z0-9][a-z0-9_-]*?)(?:_level=([abc][12]))?',word)
+    if topic:
+        name,level=topic.groups()
+        return {'id':'topic:'+name+':'+(level or 'all'),'name':human(name)+' · '+(level.upper() if level else '全部')}
+    return None
+
+
 def parse(source):
     soup=BeautifulSoup(source,'html.parser')
     for node in soup.select('script,style,audio,video,img,iframe'):node.decompose()
@@ -31,13 +51,17 @@ def parse(source):
 
 
 def opal_fields(rows):
-    result={'written':[],'spoken':[],'writtenPhrases':False,'spokenPhrases':False}
+    result={'written':[],'spoken':[],'writtenPhrases':False,'spokenPhrases':False,'writtenCategories':[],'spokenCategories':[]}
     for row in rows:
         for kind in ['written','spoken']:
             part=row['fields'].get('data-opal_'+kind)
             if part and part not in result[kind]:result[kind].append(part)
-            if row['fields'].get('data-opal_'+kind+'_phrases'):result[kind+'Phrases']=True
-    for kind in ['written','spoken']:result[kind].sort(key=lambda part:int(part.rsplit('_',1)[-1]))
+            category=row['fields'].get('data-opal_'+kind+'_phrases')
+            if category:
+                result[kind+'Phrases']=True
+                if category not in result[kind+'Categories']:result[kind+'Categories'].append(category)
+    for kind in ['written','spoken']:
+        result[kind].sort(key=lambda part:int(part.rsplit('_',1)[-1]));result[kind+'Categories'].sort()
     return result
 
 
@@ -54,6 +78,7 @@ def describe(words,opal):
             if parts or opal.get(kind+'Phrases'):result.append({'id':'opal:'+kind+':all','name':label+' · 全部','group':'学术词表','sourceKey':source,'column':'data-opal_'+kind,'value':'','kind':'opal'})
             if opal.get(kind+'Phrases'):result.append({'id':'opal:'+kind+':phrases','name':label+' · 短语','group':'学术词表','sourceKey':source,'column':'data-opal_'+kind+'_phrases','value':'','kind':'opal'})
             for part in parts:result.append({'id':'opal:'+kind+':'+part,'name':label+' · 词汇分表 '+part.rsplit('_',1)[-1],'group':'学术词表','sourceKey':source,'column':'data-opal_'+kind,'value':part,'kind':'opal'})
+            for category in opal.get(kind+'Categories',[]):result.append({'id':'opal:'+kind+':phrase:'+category,'name':label+' · '+human(category),'group':'学术短语分类','sourceKey':source,'column':'data-opal_'+kind+'_phrases','value':category,'kind':'opal'})
     for word in words:
         match=re.match(r'^@topic_(.+?)(?:_level=([abc][12]))?$',word)
         if match:
