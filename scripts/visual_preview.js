@@ -30,7 +30,7 @@ function html(node) {
   if(name==='scroll-view'&&(attr['scroll-y']||attr.scrollY))attributes+=' style="overflow-y:auto"';
   return '<' + tag + attributes + '>' + (name==='textarea'&&attr.value!==undefined?escape(attr.value):(node.children || []).map(html).join('')) + '</' + tag + '>';
 }
-function css(text, width) { return text.replace(/(-?\d+(?:\.\d+)?)rpx/g, (_, number) => Number(number) * width / 750 + 'px').replace(/(?<![.\w-])page(?=\s*\{)/g, 'body').replace(/\bview(?=[,{>\s])/g, 'div').replace(/\btext(?=[,{>\s])/g, 'span').replace(/(?<![.\w-])image(?=[,{>\s])/g,'img'); }
+function css(text, width) { return text.replace(/(-?\d+(?:\.\d+)?)rpx/g, (_, number) => Number(number) * width / 750 + 'px').replace(/(?<![.\w-])page(?=\s*\{)/g, 'body').replace(/(?<![.\w-])view(?=[,{>\s])/g, 'div').replace(/(?<![.\w-])text(?=[,{>\s])/g, 'span').replace(/(?<![.\w-])image(?=[,{>\s])/g,'img'); }
 function write(name, controller, width = 390, fileName = name) {
   const tree = compile('pages/' + name + '/index.wxml')(controller.data);
   const style = fs.readFileSync(path.join(mini, 'app.wxss'), 'utf8') + fs.readFileSync(path.join(mini, 'pages', name, 'index.wxss'), 'utf8')+fs.readFileSync(path.join(mini,'components/group-picker/index.wxss'),'utf8')+fs.readFileSync(path.join(mini,'custom-tab-bar/index.wxss'),'utf8');

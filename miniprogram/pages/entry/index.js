@@ -6,6 +6,7 @@ const sentences = require('../../services/sentences');
 const study = require('../../services/study');
 const codec = require('../../vendor/codec');
 const learning = require('../../utils/oxford-learning');
+const selection = require('../../utils/dictionary-selection');
 const {Pronunciation,voiceLabel}=require('../../services/pronunciation');
 const POS = { n: '名词', v: '动词', a: '形容词', r: '副词' };
 function entryView(result){
@@ -13,10 +14,11 @@ function entryView(result){
   return {word:result.word,phonetic:result.phonetic||'',phonetics:result.phonetics||oxford.phonetics||{},zh:result.zh||'',en:result.en||'',forms:result.forms||[],learningTags:learning.badges(oxford.learning),matchedFrom:result.referenceLabel?'':result.matchedFrom||'',sourceLabel:result.source==='offline-pack'?'牛津十版 · 全量离线':result.source==='cache'?'已缓存 · 可离线重看':result.source==='builtin'?'内置离线词条':'全量词库',hasOxford,hasContents:hasOxford&&(!!(oxford.contents||[]).length||!oxford.navVersion),hasTeaching:!!result.teaching,hasBase:!!(result.zh||result.en),hasExamples:!!(oxford.examples||[]).length,hasSenses:!!(result.senses||[]).length};
 }
 Page({
-  data: { loading: true, error: '', matches: [], resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',voiceStatus:'',speakingVariant:'',speakingExample:-1,exampleStatusIndex:-1,exampleStatus:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], referenceRows:[], relatedTotal:0, relatedPage:0, relatedPages:1, contentsOpen:false,contentsLoading:false,contentsPage:0,contentsPages:1,contentsTotal:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
+  data: { loading: true, error: '', matches: [], resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',voiceStatus:'',speakingVariant:'',speakingExample:-1,exampleStatusIndex:-1,exampleStatus:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], referenceRows:[], relatedTotal:0, relatedPage:0, relatedPages:1, contentsOpen:false,contentsLoading:false,contentsPage:0,contentsPages:1,contentsTotal:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false, page: 0, totalPages: 1, theme: 'light', fontSize: 16,pickOpen:false,pickSelecting:false,pickTokens:[],pickPage:0,pickPages:1,pickSelection:'',pickSelectionLength:0,pickWord:'',pickMeaning:'',pickLooking:false,pickCanFavorite:false },
   onLoad(options) { let query,anchor;try{query=decodeURIComponent(options.q||'');}catch(_){query=options.q||'';}try{anchor=decodeURIComponent(options.anchor||'');}catch(_){anchor=options.anchor||'';}this._query=query;this.load(query,{anchor,reference:options.ref==='1',label:ui.decode(options.label).slice(0,256)}); },
-  onShow() { ui.apply(this); if (this._entry) this.refreshFavorite(); },
+  onShow() { ui.apply(this);if(this._entry){const draft=this.data.noteStatus==='尚未保存'?this.data.note:null;this.refreshFavorite();if(draft!==null)this.setData({note:draft,noteStatus:'尚未保存'});} },
   async load(word,options={}) {
+    this.closePickText();
     this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation)this._pronunciation.cancel();
     const generation = (this._generation || 0) + 1; this._generation = generation; this._query = word;
     this._entry = null; this._matchCursors=[0]; this._matchTarget=null;this._focus=null;this._requestedAnchor=String(options.anchor||'').slice(0,1024);
@@ -58,7 +60,7 @@ Page({
     const totalPages = Math.max(1, Math.ceil(rows.length / size)); index = Math.min(Math.max(0, index), totalPages - 1);
     this.setData({ page: index, totalPages, totalItems: rows.length, oxfordBlocks: oxford ? rows.slice(index * size, (index + 1) * size) : [],examples:examples?rows.slice(index*size,(index+1)*size):[],senses: oxford||examples ? [] : rows.slice(index * size, (index + 1) * size).map(row => Object.assign({}, row, { posLabel: POS[row.pos] || row.pos })) },afterUpdate);
   },
-  onSource(event) { const source=ui.dataset(event,'source');this.stopExampleVoice();this.setData({source});this.contentPage(source==='oxford'&&this._focus?Math.floor(this._focus.index/4):0); },
+  onSource(event) { const source=ui.dataset(event,'source');this.closePickText();this.stopExampleVoice();this.setData({source});this.contentPage(source==='oxford'&&this._focus?Math.floor(this._focus.index/4):0); },
   relatedPage(index){
     const entry=this._entry||{},rows=((entry.oxford||{}).references||[]).slice(),words=new Set(rows.map(row=>row.word));
     for(const word of entry.related||[])if(!words.has(word)){rows.push({word,anchor:'',label:word});words.add(word);}
@@ -133,8 +135,8 @@ Page({
   onDictionaryMedia(){if(this._entry){media.stopAudio();wx.navigateTo({url:'/pages/dictionary-media/index?q='+encodeURIComponent(this._query||this._entry.word),fail:()=>ui.error(new Error('暂时无法打开媒体页，请返回一层后重试'))});}},
   onWordListsPrev(){this.wordListsPage(this.data.wordListPage-1);wx.pageScrollTo({selector:'#entry-wordlists',duration:180});},
   onWordListsNext(){this.wordListsPage(this.data.wordListPage+1);wx.pageScrollTo({selector:'#entry-wordlists',duration:180});},
-  onPrev() { this.stopExampleVoice();this.contentPage(this.data.page - 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
-  onNext() { this.stopExampleVoice();this.contentPage(this.data.page + 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
+  onPrev() { this.closePickText();this.stopExampleVoice();this.contentPage(this.data.page - 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
+  onNext() { this.closePickText();this.stopExampleVoice();this.contentPage(this.data.page + 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
   onWord(event) { const word = ui.dataset(event); if (!word||this.data.matchLoading)return;if(!this._entry&&this.data.matches.length){wx.navigateTo({url:'/pages/entry/index?q='+encodeURIComponent(word),fail:()=>ui.error(new Error('暂时无法打开词条，请返回一层后重试'))});return;}return this.load(word).then(()=>wx.pageScrollTo({scrollTop:0,duration:0})); },
   async matchPage(index,cursor){
     if(this.data.matchLoading||!Number.isInteger(cursor)||index<0)return;
@@ -185,7 +187,42 @@ Page({
     finally{if(generation===this._voiceGeneration)this.setData({speakingExample:-1});}
   },
   onSaveExample(event){if(!this._entry)return;const index=this.data.page*8+Number(ui.dataset(event,'index'));const item=((this._entry.oxford||{}).examples||[])[index];if(item)try{sentences.save(item.en,item.zh,'牛津十版 · '+this._entry.word);wx.showToast({title:'例句已收藏'});}catch(error){ui.error(error);}},
-  onHide(){this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation){this._pronunciation.release();this._pronunciation=null;}media.stopAudio();if(!this._unloaded)this.setData({speakingVariant:'',voiceStatus:'',speakingExample:-1,exampleStatusIndex:-1,exampleStatus:''});},
+  onPickText(){
+    if(!this._entry||!['oxford','examples'].includes(this.data.source))return;
+    const text=this.data.source==='oxford'?selection.fromBlocks(this.data.oxfordBlocks):selection.fromExamples(this.data.examples);if(!text.trim())return ui.error(new Error('本页没有可选文字'));
+    this._pickText=text;this._pickRanges=selection.ranges(text);this._pickAnchor=null;this._pickSelection=null;this._pickEntry=null;this._pickRequest=(this._pickRequest||0)+1;
+    this.setData({pickOpen:true,pickSelecting:false,pickWord:'',pickMeaning:'',pickLooking:false,pickCanFavorite:false,pickSelection:'',pickSelectionLength:0});this.pickTextPage(0);
+  },
+  closePickText(){
+    this._pickRequest=(this._pickRequest||0)+1;this._pickEntry=null;this._pickText='';this._pickRanges=[];this._pickAnchor=null;this._pickSelection=null;
+    if(this.data.pickOpen&&!this._unloaded)this.setData({pickOpen:false,pickTokens:[],pickLooking:false,pickWord:'',pickMeaning:'',pickCanFavorite:false,pickSelection:'',pickSelectionLength:0});
+  },
+  pickTextPage(index){
+    if(!this.data.pickOpen||!this._pickRanges||!this._pickRanges.length)return;index=Math.max(0,Math.min(index,this._pickRanges.length-1));
+    this.setData({pickPage:index,pickPages:this._pickRanges.length,pickTokens:selection.tokens(this._pickRanges[index],this._pickSelection)});
+  },
+  onPickPrev(){this.pickTextPage(this.data.pickPage-1);},onPickNext(){this.pickTextPage(this.data.pickPage+1);},
+  onPickMode(){this._pickAnchor=null;this._pickSelection=null;this.setData({pickSelecting:!this.data.pickSelecting,pickSelection:'',pickSelectionLength:0});this.pickTextPage(this.data.pickPage);},
+  onPickToken(event){
+    const data=event.currentTarget.dataset,start=Number(data.start),end=Number(data.end);if(!Number.isInteger(start)||!Number.isInteger(end)||start<0||end<=start||end>this._pickText.length)return;
+    if(this.data.pickSelecting){
+      if(!this._pickAnchor){this._pickAnchor={start,end};this._pickSelection={start,end};}else{this._pickSelection={start:Math.min(this._pickAnchor.start,start),end:Math.max(this._pickAnchor.end,end)};this._pickAnchor=null;}
+      const value=this._pickText.slice(this._pickSelection.start,this._pickSelection.end);this.setData({pickSelection:Array.from(value).slice(0,80).join('')+(Array.from(value).length>80?'…':''),pickSelectionLength:value.length});this.pickTextPage(this.data.pickPage);return;
+    }
+    if(data.word)this.lookupPicked(data.word);
+  },
+  onPickSelected(){if(!this._pickSelection)return;const text=this._pickText.slice(this._pickSelection.start,this._pickSelection.end).replace(/\s+/g,' ').trim();if(!text||text.length>256)return ui.error(new Error('请选择 1～256 字的词句'));this.lookupPicked(text);},
+  async lookupPicked(value){
+    const word=String(value||'').trim();if(!word||word.length>256)return;const generation=this._pickRequest=(this._pickRequest||0)+1;this._pickEntry=null;this.setData({pickWord:word,pickMeaning:'',pickLooking:true,pickCanFavorite:false});
+    try{
+      const entry=await dictionary.lookup(word);if(this._pickRequest!==generation||!this.data.pickOpen||this._unloaded)return;if(!entry||!['entry','matches','missing'].includes(entry.kind))throw new Error('词库返回的数据不完整，请重试');this._pickEntry=entry.kind==='entry'?entry:null;
+      const meaning=this._pickEntry?(entry.brief||entry.zh||(entry.teaching||{}).title||((entry.senses||[])[0]||{}).definition||'点击完整释义查看'):entry.kind==='matches'?'找到多个匹配，点击完整释义查看':'暂未匹配，可点击完整释义查看建议';
+      this.setData({pickMeaning:meaning,pickLooking:false,pickCanFavorite:!!this._pickEntry});
+    }catch(error){if(this._pickRequest===generation&&this.data.pickOpen&&!this._unloaded)this.setData({pickMeaning:error.message,pickLooking:false});}
+  },
+  onPickDetail(){const word=this._pickEntry?this._pickEntry.word:this.data.pickWord;if(word)wx.navigateTo({url:'/pages/entry/index?q='+encodeURIComponent(word),fail:()=>ui.error(new Error('暂时无法打开词条，请返回一层后重试'))});},
+  onPickFavorite(){if(!this._pickEntry)return;try{if(!store.favorite(this._pickEntry.word))store.toggle(this._pickEntry.word,this.data.pickMeaning);if(this._entry&&store.key(this._entry.word)===store.key(this._pickEntry.word))this.setData({favorite:true});wx.showToast({title:'已加入生词本'});}catch(error){ui.error(error);}},
+  onHide(){this._voiceGeneration=(this._voiceGeneration||0)+1;this._pickRequest=(this._pickRequest||0)+1;if(this._pronunciation){this._pronunciation.release();this._pronunciation=null;}media.stopAudio();if(!this._unloaded)this.setData(Object.assign({speakingVariant:'',voiceStatus:'',speakingExample:-1,exampleStatusIndex:-1,exampleStatus:''},this.data.pickLooking?{pickLooking:false,pickMeaning:'查询已暂停，请重新点词'}:{}));},
   onUnload() { this._unloaded=true;this._generation = (this._generation || 0) + 1;this.onHide(); },
   onShareAppMessage() { const anchor=this._requestedAnchor||'',unique=((((this._entry||{}).oxford||{}).anchors||[]).filter(row=>row.id===anchor).length===1);return { title: this._entry ? this._entry.word + ' · 涵词典' : '涵词典', path: '/pages/entry/index?q=' + encodeURIComponent(this._query)+(anchor&&unique?'&anchor='+encodeURIComponent(anchor):'')+(this._entry&&this._entry.referenceLabel?'&ref=1&label='+encodeURIComponent(this._entry.referenceLabel):'') }; }
 });
