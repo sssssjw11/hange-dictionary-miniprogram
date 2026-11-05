@@ -13,14 +13,14 @@ function entryView(result){
   return {word:result.word,phonetic:result.phonetic||'',phonetics:result.phonetics||oxford.phonetics||{},zh:result.zh||'',en:result.en||'',forms:result.forms||[],learningTags:learning.badges(oxford.learning),matchedFrom:result.referenceLabel?'':result.matchedFrom||'',sourceLabel:result.source==='offline-pack'?'牛津十版 · 全量离线':result.source==='cache'?'已缓存 · 可离线重看':result.source==='builtin'?'内置离线词条':'全量词库',hasOxford,hasContents:hasOxford&&(!!(oxford.contents||[]).length||!oxford.navVersion),hasTeaching:!!result.teaching,hasBase:!!(result.zh||result.en),hasExamples:!!(oxford.examples||[]).length,hasSenses:!!(result.senses||[]).length};
 }
 Page({
-  data: { loading: true, error: '', matches: [], resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',voiceStatus:'',speakingVariant:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], referenceRows:[], relatedTotal:0, relatedPage:0, relatedPages:1, contentsOpen:false,contentsLoading:false,contentsPage:0,contentsPages:1,contentsTotal:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
+  data: { loading: true, error: '', matches: [], resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',voiceStatus:'',speakingVariant:'',speakingExample:-1,exampleStatusIndex:-1,exampleStatus:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], referenceRows:[], relatedTotal:0, relatedPage:0, relatedPages:1, contentsOpen:false,contentsLoading:false,contentsPage:0,contentsPages:1,contentsTotal:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
   onLoad(options) { let query,anchor;try{query=decodeURIComponent(options.q||'');}catch(_){query=options.q||'';}try{anchor=decodeURIComponent(options.anchor||'');}catch(_){anchor=options.anchor||'';}this._query=query;this.load(query,{anchor,reference:options.ref==='1',label:ui.decode(options.label).slice(0,256)}); },
   onShow() { ui.apply(this); if (this._entry) this.refreshFavorite(); },
   async load(word,options={}) {
     this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation)this._pronunciation.cancel();
     const generation = (this._generation || 0) + 1; this._generation = generation; this._query = word;
     this._entry = null; this._matchCursors=[0]; this._matchTarget=null;this._focus=null;this._requestedAnchor=String(options.anchor||'').slice(0,1024);
-    this.setData({ loading: true, error: '', matches: [], entry: null, resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'',supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',voiceStatus:'',speakingVariant:'',contentsOpen:false,contentsLoading:false,contentsPage:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false });
+    this.setData({ loading: true, error: '', matches: [], entry: null, resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'',supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',voiceStatus:'',speakingVariant:'',speakingExample:-1,exampleStatusIndex:-1,exampleStatus:'',contentsOpen:false,contentsLoading:false,contentsPage:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false });
     try {
       const result = options.entry||await dictionary.lookup(word); if (this._generation !== generation) return;
       if (result.kind !== 'entry') {
@@ -58,7 +58,7 @@ Page({
     const totalPages = Math.max(1, Math.ceil(rows.length / size)); index = Math.min(Math.max(0, index), totalPages - 1);
     this.setData({ page: index, totalPages, totalItems: rows.length, oxfordBlocks: oxford ? rows.slice(index * size, (index + 1) * size) : [],examples:examples?rows.slice(index*size,(index+1)*size):[],senses: oxford||examples ? [] : rows.slice(index * size, (index + 1) * size).map(row => Object.assign({}, row, { posLabel: POS[row.pos] || row.pos })) },afterUpdate);
   },
-  onSource(event) { const source=ui.dataset(event,'source');this.setData({source});this.contentPage(source==='oxford'&&this._focus?Math.floor(this._focus.index/4):0); },
+  onSource(event) { const source=ui.dataset(event,'source');this.stopExampleVoice();this.setData({source});this.contentPage(source==='oxford'&&this._focus?Math.floor(this._focus.index/4):0); },
   relatedPage(index){
     const entry=this._entry||{},rows=((entry.oxford||{}).references||[]).slice(),words=new Set(rows.map(row=>row.word));
     for(const word of entry.related||[])if(!words.has(word)){rows.push({word,anchor:'',label:word});words.add(word);}
@@ -133,8 +133,8 @@ Page({
   onDictionaryMedia(){if(this._entry){media.stopAudio();wx.navigateTo({url:'/pages/dictionary-media/index?q='+encodeURIComponent(this._query||this._entry.word),fail:()=>ui.error(new Error('暂时无法打开媒体页，请返回一层后重试'))});}},
   onWordListsPrev(){this.wordListsPage(this.data.wordListPage-1);wx.pageScrollTo({selector:'#entry-wordlists',duration:180});},
   onWordListsNext(){this.wordListsPage(this.data.wordListPage+1);wx.pageScrollTo({selector:'#entry-wordlists',duration:180});},
-  onPrev() { this.contentPage(this.data.page - 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
-  onNext() { this.contentPage(this.data.page + 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
+  onPrev() { this.stopExampleVoice();this.contentPage(this.data.page - 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
+  onNext() { this.stopExampleVoice();this.contentPage(this.data.page + 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
   onWord(event) { const word = ui.dataset(event); if (!word||this.data.matchLoading)return;if(!this._entry&&this.data.matches.length){wx.navigateTo({url:'/pages/entry/index?q='+encodeURIComponent(word),fail:()=>ui.error(new Error('暂时无法打开词条，请返回一层后重试'))});return;}return this.load(word).then(()=>wx.pageScrollTo({scrollTop:0,duration:0})); },
   async matchPage(index,cursor){
     if(this.data.matchLoading||!Number.isInteger(cursor)||index<0)return;
@@ -168,15 +168,24 @@ Page({
   async onSpeak(event){
     if(!this._entry)return;const variant=ui.dataset(event,'variant')==='UK'?'UK':'US';
     if(this.data.speakingVariant===variant){this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation)this._pronunciation.cancel();this.setData({speakingVariant:'',voiceStatus:'已停止发音'});return;}
-    const generation=this._voiceGeneration=(this._voiceGeneration||0)+1;if(!this._pronunciation)this._pronunciation=new Pronunciation();this.setData({speakingVariant:variant,voiceStatus:'正在准备发音…'});
+    const generation=this._voiceGeneration=(this._voiceGeneration||0)+1;if(!this._pronunciation)this._pronunciation=new Pronunciation();this.setData({speakingVariant:variant,voiceStatus:'正在准备发音…',speakingExample:-1,exampleStatusIndex:-1,exampleStatus:''});
     try{await this._pronunciation.play(this._entry,{variant,onStart:info=>{if(generation===this._voiceGeneration)this.setData({voiceStatus:voiceLabel(info)});}});}
     catch(error){if(generation===this._voiceGeneration){this.setData({voiceStatus:error.message});ui.error(error);}}
     finally{if(generation===this._voiceGeneration)this.setData({speakingVariant:''});}
   },
   onAI(){if(this._entry){getApp().globalData.aiWord=this._entry.word;wx.switchTab({url:'/pages/ai/index'});}},
   onKnown(){if(!this._entry)return;try{study.known(this._entry.word,true);wx.showToast({title:'已标为掌握'});}catch(error){ui.error(error);}},
+  stopExampleVoice(){if(this.data.speakingExample<0)return;this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation)this._pronunciation.cancel();this.setData({speakingExample:-1,exampleStatusIndex:-1,exampleStatus:''});},
+  async onSpeakExample(event){
+    if(!this._entry)return;const index=this.data.page*8+Number(ui.dataset(event,'index')),item=((this._entry.oxford||{}).examples||[])[index];if(!item)return;
+    if(this.data.speakingExample===index){this.stopExampleVoice();return;}
+    const generation=this._voiceGeneration=(this._voiceGeneration||0)+1;if(!this._pronunciation)this._pronunciation=new Pronunciation();this.setData({speakingVariant:'',voiceStatus:'',speakingExample:index,exampleStatusIndex:index,exampleStatus:'正在准备朗读…'});
+    try{await this._pronunciation.play(this._entry,{text:item.en,kind:'example',onStart:info=>{if(generation===this._voiceGeneration)this.setData({exampleStatus:voiceLabel(info)});}});}
+    catch(error){if(generation===this._voiceGeneration){this.setData({exampleStatus:error.message});ui.error(error);}}
+    finally{if(generation===this._voiceGeneration)this.setData({speakingExample:-1});}
+  },
   onSaveExample(event){if(!this._entry)return;const index=this.data.page*8+Number(ui.dataset(event,'index'));const item=((this._entry.oxford||{}).examples||[])[index];if(item)try{sentences.save(item.en,item.zh,'牛津十版 · '+this._entry.word);wx.showToast({title:'例句已收藏'});}catch(error){ui.error(error);}},
-  onHide(){this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation){this._pronunciation.release();this._pronunciation=null;}media.stopAudio();if(!this._unloaded)this.setData({speakingVariant:'',voiceStatus:''});},
+  onHide(){this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation){this._pronunciation.release();this._pronunciation=null;}media.stopAudio();if(!this._unloaded)this.setData({speakingVariant:'',voiceStatus:'',speakingExample:-1,exampleStatusIndex:-1,exampleStatus:''});},
   onUnload() { this._unloaded=true;this._generation = (this._generation || 0) + 1;this.onHide(); },
   onShareAppMessage() { const anchor=this._requestedAnchor||'',unique=((((this._entry||{}).oxford||{}).anchors||[]).filter(row=>row.id===anchor).length===1);return { title: this._entry ? this._entry.word + ' · 涵词典' : '涵词典', path: '/pages/entry/index?q=' + encodeURIComponent(this._query)+(anchor&&unique?'&anchor='+encodeURIComponent(anchor):'')+(this._entry&&this._entry.referenceLabel?'&ref=1&label='+encodeURIComponent(this._entry.referenceLabel):'') }; }
 });
