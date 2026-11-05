@@ -30,7 +30,7 @@ class Pronunciation{
   return {reason:'MDD 未包含此词形的对应原版录音'};
  }
  async play(entry,options={}){
-  if(this.closed)return {cancelled:true};this.cancel();const generation=this.generation,text=String(options.text===undefined?(entry||{}).word||'':options.text),variant=options.variant==='UK'?'UK':'US',mode=MODES.includes(options.mode)?options.mode:'auto';
+  if(this.closed)return {cancelled:true};this.cancel();const defaults=store.settings(),generation=this.generation,text=String(options.text===undefined?(entry||{}).word||'':options.text),variant=options.variant===undefined?defaults.voiceVariant:options.variant==='UK'?'UK':'US',mode=MODES.includes(options.mode)?options.mode:defaults.voiceMode;
   if(!text.trim()||text.length>256)throw new Error('请输入有效的单词或短语');
   const current=()=>!this.closed&&generation===this.generation,emit=info=>{if(current()&&options.onStart)options.onStart(info);};let reason='';
   try{
@@ -43,7 +43,7 @@ class Pronunciation{
    }
    if(!current())return {cancelled:true};let announced=false;
    const info=data=>Object.assign({},data,{kind:'tts',variant,reason});
-   const result=await media.speakAndWait(text,variant,'en',0,data=>{announced=true;emit(info(data));});
+   const result=await media.speakAndWait(text,variant,'en',options.rate,data=>{announced=true;emit(info(data));});
    if(!current()||result.cancelled)return {cancelled:true};if(!announced)emit(info(result));return info(result);
   }catch(error){if(!current())return {cancelled:true};throw error;}
  }

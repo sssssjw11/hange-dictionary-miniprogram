@@ -122,8 +122,8 @@ function importJson(text,group=null){
  for(const incoming of items){let existing=byWord.get(incoming.word);if(!existing){existing=incoming;data.favorites.push(existing);byWord.set(existing.word,existing);count++;}if(group&&!existing.groups.includes(group)){existing.groups.push(group);existing.updated=Date.now();}}
  write(data);return count;
 }
-function settings(){return Object.assign({theme:'system',fontSize:16,apiBase:null,online:true},wx.getStorageSync(SETTINGS)||{});}
-function saveSettings(value){wx.setStorageSync(SETTINGS,Object.assign(settings(),value));}
+function settings(){const value=Object.assign({theme:'system',fontSize:16,apiBase:null,online:true,voiceMode:'auto',voiceVariant:'US',ttsRate:0},wx.getStorageSync(SETTINGS)||{});if(!['auto','tts','original'].includes(value.voiceMode))value.voiceMode='auto';if(!['UK','US'].includes(value.voiceVariant))value.voiceVariant='US';if(![-2,0,2].includes(value.ttsRate))value.ttsRate=0;return value;}
+function saveSettings(value){if(value.voiceMode!==undefined&&!['auto','tts','original'].includes(value.voiceMode)||value.voiceVariant!==undefined&&!['UK','US'].includes(value.voiceVariant)||value.ttsRate!==undefined&&![-2,0,2].includes(value.ttsRate))throw new Error('发音设置无效');wx.setStorageSync(SETTINGS,Object.assign(settings(),value));}
 function snapshot(){return read();}
 function mergeSnapshot(value){
  if(!object(value)||!Array.isArray(value.favorites)||value.favorites.length>10000||!Array.isArray(value.history)||value.history.length>100)throw new Error('学习备份格式无效');

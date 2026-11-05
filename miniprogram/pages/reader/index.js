@@ -66,7 +66,7 @@ Page({
  onSaveSelection(){if(this._selection)this.openAnnotation(this._selection.start,this._selection.end);},
  onBookmark(){if(!this._article)return;try{library.bookmark(this._id,this._ranges[this.data.page].start,'第 '+(this.data.page+1)+' 页');this.refreshArticle();}catch(error){ui.error(error);}},
  onAnnotations(){wx.navigateTo({url:'/pages/annotations/index?article='+encodeURIComponent(this._id)+'&from=reader',success:result=>result.eventChannel.on('jump',value=>this.jumpOffset(value.offset))});},
- async onSpeak(){if(!this._article)return;try{await media.speak(this._pages[this.data.page],'US',/[\u3400-\u9fff]/.test(this._pages[this.data.page])?'zh':'en');}catch(error){ui.error(error);}},
+ async onSpeak(){if(!this._article)return;try{await media.speak(this._pages[this.data.page],undefined,/[\u3400-\u9fff]/.test(this._pages[this.data.page])?'zh':'en');}catch(error){ui.error(error);}},
  onSavePassage(){if(!this._article)return;try{sentences.save(this._pages[this.data.page],'',this._article.title);wx.showToast({title:'已存为例句卡片'});}catch(error){ui.error(error);}},
  onTranslate(){if(this._article)wx.navigateTo({url:'/pages/translate/index',success:result=>result.eventChannel.emit('source',{text:this._pages[this.data.page]})});},
  onHide(){this._lookup++;media.stopAudio();},onUnload(){this._closed=true;this.onHide();}

@@ -10,9 +10,9 @@ Page({
   this._closed=false;this._run=0;this._load=0;
   try{
    const deck=ui.decode(options.deck||'favorites'),saved=study.playback();this._words=study.words(deck);
-   const info=study.decks().find(item=>item.id===deck),settings=saved&&saved.deck===deck?saved:{};
+   const info=study.decks().find(item=>item.id===deck),settings=saved&&saved.deck===deck?saved:{},defaults=store.settings();
    const index=settings.word&&this._words.includes(settings.word)?this._words.indexOf(settings.word):Math.max(0,Math.min(Number(settings.index)||0,this._words.length-1));
-   this.setData({deck,name:info?info.name:'单词播放',total:this._words.length,variant:settings.variant==='UK'?'UK':'US',voiceMode:MODES.includes(settings.voiceMode)?settings.voiceMode:'auto',interval:[2,3,5,8,10].includes(settings.interval)?settings.interval:3,loop:!!settings.loop,readMeaning:!!settings.readMeaning,showMeaning:settings.showMeaning!==false});
+   this.setData({deck,name:info?info.name:'单词播放',total:this._words.length,variant:['UK','US'].includes(settings.variant)?settings.variant:defaults.voiceVariant,voiceMode:MODES.includes(settings.voiceMode)?settings.voiceMode:defaults.voiceMode,interval:[2,3,5,8,10].includes(settings.interval)?settings.interval:3,loop:!!settings.loop,readMeaning:!!settings.readMeaning,showMeaning:settings.showMeaning!==false});
    if(!this._words.length)throw new Error('词表为空，请先收藏或导入单词');this.loadCard(index);
   }catch(error){this.setData({error:error.message});}
  },
@@ -37,7 +37,7 @@ Page({
     if(!entry)throw new Error('当前词无法播放，可跳过后继续');
     this.setData({message:'准备单词发音…'});if(!this._pronunciation)this._pronunciation=new Pronunciation();
     const result=await this._pronunciation.play(entry,{text:entry.word,variant:this.data.variant,mode:this.data.voiceMode,onStart:info=>{if(!this._closed&&generation===this._run)this.setData({message:info.kind==='original'?'正在播放原版录音':'正在朗读单词',voiceStatus:voiceLabel(info)});}});if(this._closed||generation!==this._run||result.cancelled)return;
-    if(this.data.readMeaning&&this.data.meaning){this.setData({message:'正在朗读释义'});const meaning=await media.speakAndWait(this.data.meaning,'US',/[\u3400-\u9fff]/.test(this.data.meaning)?'zh':'en',0,data=>{if(!this._closed&&generation===this._run)this.setData({voiceStatus:'释义 · 系统合成 · '+(data.locale||'本机音色')});});if(this._closed||generation!==this._run||meaning.cancelled)return;}
+    if(this.data.readMeaning&&this.data.meaning){this.setData({message:'正在朗读释义'});const meaning=await media.speakAndWait(this.data.meaning,undefined,/[\u3400-\u9fff]/.test(this.data.meaning)?'zh':'en',undefined,data=>{if(!this._closed&&generation===this._run)this.setData({voiceStatus:'释义 · 系统合成 · '+(data.locale||'本机音色')});});if(this._closed||generation!==this._run||meaning.cancelled)return;}
     if(this.data.index===this._words.length-1&&!this.data.loop){this.setData({message:'本轮播放完成'});break;}
     this.setData({message:this.data.interval+' 秒后继续'});await this.wait(this.data.interval*1000);if(this._closed||generation!==this._run)return;
     await this.loadCard((this.data.index+1)%this._words.length);
