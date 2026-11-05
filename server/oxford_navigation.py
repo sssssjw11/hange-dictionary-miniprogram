@@ -5,6 +5,23 @@ from urllib.parse import unquote
 from bs4 import Comment, NavigableString, Tag
 
 IGNORED={'script','style','link','meta','base','iframe','object','embed','img','audio','video','source','audio-wr'}
+LEARNING_FIELDS=('levels','extendedLevels','lists','extendedLists')
+LEVELS={'A1','A2','B1','B2','C1','C2'}
+
+def empty_learning():return {field:[] for field in LEARNING_FIELDS}
+
+def source_learning(attributes):
+    result=empty_learning();value=lambda name:str(attributes.get(name,'')).strip().upper()
+    if value('cefr') in LEVELS:result['levels'].append(value('cefr'))
+    if value('fkcefr') in LEVELS:result['extendedLevels'].append(value('fkcefr'))
+    for wordlist in ['3000','5000']:
+        if value('ox'+wordlist)=='Y':result['lists'].append(wordlist)
+        if value('fkox'+wordlist)=='Y':result['extendedLists'].append(wordlist)
+    return result
+
+def merge_learning(target,source):
+    for field in LEARNING_FIELDS:target[field]=sorted(set(target[field]+source.get(field,[])))
+    return target
 def classes(node):return set(node.get('class',[])) if isinstance(node,Tag) else set()
 def hidden(node):return isinstance(node,Comment) or isinstance(node,Tag) and (node.name in IGNORED or 'audio_play_button' in classes(node) or str(node.get('href','')).lower().startswith('sound:'))
 def source_text(node):
@@ -44,16 +61,17 @@ def heading(node,word):
     if 'phrasal_verb_links' in c:return '短语动词',source_text(by_class('heading') or find(node,lambda item:item.name=='h2')) or 'Phrasal Verbs'
     return None
 def navigation(soup,blocks,word=''):
-    anchors=[];contents=[];references=[];local=[];position=0
+    anchors=[];contents=[];references=[];local=[];position=0;learning=empty_learning()
     def visit(node,root=False):
         nonlocal position
         if hidden(node):return
         if isinstance(node,NavigableString):position+=units(str(node));return
         if not isinstance(node,Tag):return
+        markers=source_learning(node.attrs);merge_learning(learning,markers)
         identifier=node.get('id') or (node.get('name') if node.name=='a' else None)
         if identifier:anchors.append({'id':identifier,'document':0,'position':position})
         title=heading(node,word)
-        if title and title[1].strip():contents.append({'key':'0-'+str(len(contents)),'document':0,'position':position,'id':identifier or '','kind':title[0],'label':excerpt(title[1])})
+        if title and title[1].strip():contents.append({'key':'0-'+str(len(contents)),'document':0,'position':position,'id':identifier or '','kind':title[0],'label':excerpt(title[1]),'learning':markers})
         href=node.get('href','')
         try:
             if href.startswith('#') and len(href)>1:local.append({'anchor':decode(href[1:]),'document':0,'label':excerpt(source_text(node))})
@@ -73,4 +91,4 @@ def navigation(soup,blocks,word=''):
     for marker in anchors+contents:
         index=min(bisect_right(ends,marker['position']),len(ends)-1)
         marker.update(blockIndex=index,offset=marker['position']-(ends[index-1] if index>0 else 0))
-    return {'anchors':anchors,'contents':contents,'references':references,'localLinks':local}
+    return {'anchors':anchors,'contents':contents,'references':references,'localLinks':local,'learning':learning}

@@ -5,10 +5,11 @@ const media = require('../../services/media');
 const sentences = require('../../services/sentences');
 const study = require('../../services/study');
 const codec = require('../../vendor/codec');
+const learning = require('../../utils/oxford-learning');
 const POS = { n: '名词', v: '动词', a: '形容词', r: '副词' };
 function entryView(result){
   const oxford=result.oxford||{},hasOxford=!!(oxford.blocks||[]).length;
-  return {word:result.word,phonetic:result.phonetic||'',phonetics:result.phonetics||oxford.phonetics||{},zh:result.zh||'',en:result.en||'',forms:result.forms||[],matchedFrom:result.referenceLabel?'':result.matchedFrom||'',sourceLabel:result.source==='offline-pack'?'牛津十版 · 全量离线':result.source==='cache'?'已缓存 · 可离线重看':result.source==='builtin'?'内置离线词条':'全量词库',hasOxford,hasContents:hasOxford&&(!!(oxford.contents||[]).length||!oxford.navVersion),hasTeaching:!!result.teaching,hasBase:!!(result.zh||result.en),hasExamples:!!(oxford.examples||[]).length,hasSenses:!!(result.senses||[]).length};
+  return {word:result.word,phonetic:result.phonetic||'',phonetics:result.phonetics||oxford.phonetics||{},zh:result.zh||'',en:result.en||'',forms:result.forms||[],learningTags:learning.badges(oxford.learning),matchedFrom:result.referenceLabel?'':result.matchedFrom||'',sourceLabel:result.source==='offline-pack'?'牛津十版 · 全量离线':result.source==='cache'?'已缓存 · 可离线重看':result.source==='builtin'?'内置离线词条':'全量词库',hasOxford,hasContents:hasOxford&&(!!(oxford.contents||[]).length||!oxford.navVersion),hasTeaching:!!result.teaching,hasBase:!!(result.zh||result.en),hasExamples:!!(oxford.examples||[]).length,hasSenses:!!(result.senses||[]).length};
 }
 Page({
   data: { loading: true, error: '', matches: [], resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], referenceRows:[], relatedTotal:0, relatedPage:0, relatedPages:1, contentsOpen:false,contentsLoading:false,contentsPage:0,contentsPages:1,contentsTotal:0,contentsRows:[],localJumpRows:[],focusLabel:'',focusError:'',referenceLoading:false, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
@@ -59,7 +60,7 @@ Page({
     const entry=this._entry||{},rows=((entry.oxford||{}).references||[]).slice(),words=new Set(rows.map(row=>row.word));
     for(const word of entry.related||[])if(!words.has(word)){rows.push({word,anchor:'',label:word});words.add(word);}
     this._references=rows;const pages=Math.max(1,Math.ceil(rows.length/24));index=Math.min(Math.max(0,index),pages-1);
-    const selected=rows.slice(index*24,(index+1)*24);this.setData({related:selected.map(row=>row.word),referenceRows:selected.map((row,i)=>Object.assign({},row,{index:index*24+i})),relatedPage:index,relatedPages:pages,relatedTotal:rows.length});
+    const selected=rows.slice(index*24,(index+1)*24);this.setData({related:selected.map(row=>row.word),referenceRows:selected.map((row,i)=>Object.assign({},row,{index:index*24+i,learningLabel:learning.badges(row.learning).join(' · ')})),relatedPage:index,relatedPages:pages,relatedTotal:rows.length});
   },
   contentsPage(index){
     const nav=(this._entry||{}).oxford||{},rows=nav.contents||[],pages=Math.max(1,Math.ceil(rows.length/24));index=Math.min(Math.max(0,index),pages-1);

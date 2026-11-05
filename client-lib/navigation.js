@@ -1,3 +1,4 @@
+import {emptyLearning,sourceLearning,mergeLearning} from './learning';
 const ignored=new Set(['script','style','link','meta','base','iframe','object','embed','img','audio','video','source','audio-wr']);
 const classes=node=>new Set(((node.attribs||{}).class||'').split(/\s+/));
 function hidden(node){return node.type==='comment'||ignored.has(node.name)||classes(node).has('audio_play_button')||/^sound:/i.test((node.attribs||{}).href||'');}
@@ -17,13 +18,14 @@ function heading(node,word){
   return null;
 }
 export function navigation(root,blocks,document,word){
-  const anchors=[],contents=[],references=[],localLinks=[];let position=0;
+  const anchors=[],contents=[],references=[],localLinks=[],learning=emptyLearning();let position=0;
   function visit(node){
     if(hidden(node))return;
     if(node.type==='text'){position+=node.data.length;return;}
     const at=node.attribs||{},c=classes(node),id=at.id||(node.name==='a'?at.name:'');
+    const markers=sourceLearning(at);mergeLearning(learning,markers);
     if(id)anchors.push({id,document,position});
-    const title=heading(node,word);if(title&&title.label.trim())contents.push({key:document+'-'+contents.length,document,position,id:id||'',kind:title.kind,label:excerpt(title.label)});
+    const title=heading(node,word);if(title&&title.label.trim())contents.push({key:document+'-'+contents.length,document,position,id:id||'',kind:title.kind,label:excerpt(title.label),learning:markers});
     const href=at.href||'';
     try{
       if(href.startsWith('#')&&href.length>1)localLinks.push({anchor:decodeURIComponent(href.slice(1)),document,label:excerpt(sourceText(node))});
@@ -44,7 +46,7 @@ export function navigation(root,blocks,document,word){
     while(left<right){const middle=(left+right)>>>1;if(ends[middle]>marker.position)right=middle;else left=middle+1;}
     return Object.assign({},marker,{blockIndex:left,offset:marker.position-(left?ends[left-1]:0)});
   }
-  return{anchors:anchors.map(locate),contents:contents.map(locate),references,localLinks};
+  return{anchors:anchors.map(locate),contents:contents.map(locate),references,localLinks,learning};
 }
 export function nodeLength(node){return node.type==='text'?node.text.length:(node.children||[]).reduce((sum,child)=>sum+nodeLength(child),0);}
 function splitNodes(nodes,offset){

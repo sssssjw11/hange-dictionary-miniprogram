@@ -15,7 +15,7 @@ import zlib
 
 from bs4 import BeautifulSoup, Comment, NavigableString
 from oxford_summary import oxford_summary, visible_soup
-from oxford_navigation import navigation, sense_prefix
+from oxford_navigation import navigation, sense_prefix, empty_learning, merge_learning
 from text_index import normalize, has_han, query_terms, meaning_rank
 from spelling import eligible as spelling_eligible, rank as spelling_rank
 
@@ -65,7 +65,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.7.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.8.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -270,10 +270,11 @@ class Engine:
                 data['forms'].append({'label': labels[code], 'word': word})
         data['tags'] = (data.pop('tagsRaw', '') or '').split()
         blocks, related, examples, phonetics, brief = [], [], [], {}, ''
-        anchors=[];contents=[];references=[];local_links=[]
+        anchors=[];contents=[];references=[];local_links=[];learning=empty_learning()
         for document,(identifier, headword, html) in enumerate(pages):
             first_block=len(blocks)
             rendered, links, info = rich_blocks(html, with_info=True,word=headword)
+            merge_learning(learning,info['learning'])
             for nodes in rendered:
                 blocks.append({'id': str(identifier) + '-' + str(len(blocks)), 'nodes': nodes})
             related.extend(links)
@@ -290,7 +291,7 @@ class Engine:
         for item in references:
             key=(item['word'],item['anchor'])
             if key not in seen_references:seen_references.add(key);unique_references.append(item)
-        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'localLinks':local_links}
+        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'localLinks':local_links,'learningVersion':1,'learning':learning}
         data['brief']=brief
         data['phonetics']=phonetics
         related.extend((data.get('teaching') or {}).get('related', []))
