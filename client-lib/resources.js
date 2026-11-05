@@ -20,9 +20,10 @@ export function mediaReferences(root){
    const at=node.attribs||{},value=node.name==='a'?at.href||'':at.src||'',key=node.name==='a'&&!/^sound:\/\//i.test(value)?null:resourceKey(value);
    if(key&&!seen.has(key)){
     seen.add(key);const kind=image.has(key.split('.').pop())?'image':'audio',c=classes(node),variant=c.includes('pron-uk')?'UK':c.includes('pron-us')?'US':'';
-    let label=at.alt||at.title||'';
+    let label=at.alt||at.title||'',pronunciationText='';
+    if(kind==='audio'){const title=String(at.title||'').replace(/\s+/g,' ').trim(),match=/^(.+?) pronunciation(?:\s|$)/i.exec(title);let parent=node.parent;for(let count=0;parent&&count<4;count++,parent=parent.parent){if(classes(parent).some(value=>value==='phons_br'||value==='phons_n_am')){if(match)pronunciationText=match[1];break;}}}
     if(kind==='audio'){let parent=node.parent;for(let count=0;parent&&count<4;count++,parent=parent.parent){if(classes(parent).some(value=>value==='entry'||value==='sense'))break;if(parent.name==='li'){const example=find(parent,item=>classes(item).includes('x'));if(example){label='例句 · '+text(example);break;}}}}
-    label=Array.from(String(label||key.split('/').pop()).replace(/\s+/g,' ').trim()).slice(0,200).join('');rows.push({key,kind,variant,label});
+    label=Array.from(String(label||key.split('/').pop()).replace(/\s+/g,' ').trim()).slice(0,200).join('');const row={key,kind,variant,label};if(pronunciationText)row.pronunciationText=pronunciationText;rows.push(row);
    }
   }
   for(const child of node.children||[])visit(child);

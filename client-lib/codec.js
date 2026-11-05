@@ -123,5 +123,5 @@ export function renderOxford(pages) {
   const seen=new Set(),uniqueReferences=references.filter(row=>{const key=row.word+'\0'+row.anchor;if(seen.has(key))return false;seen.add(key);return true;});
   const listIds=new Set(),uniqueListLinks=wordListLinks.filter(row=>{if(listIds.has(row.id))return false;listIds.add(row.id);return true;});
   const mediaKeys=new Set(),uniqueMedia=mediaRefs.filter(row=>{if(mediaKeys.has(row.key))return false;mediaKeys.add(row.key);return true;});
-  return { title: '牛津高阶英汉双解 · 第10版', documents: pages.length, blocks, related: Array.from(new Set(related)), phonetics, chineseNodes, senses, examples, brief:summary(parts),navVersion:1,anchors,contents,references:uniqueReferences,localLinks,learningVersion:1,learning,wordListVersion:1,wordListLinks:uniqueListLinks,mediaVersion:1,mediaRefs:uniqueMedia };
+  return { title: '牛津高阶英汉双解 · 第10版', documents: pages.length, blocks, related: Array.from(new Set(related)), phonetics, chineseNodes, senses, examples, brief:summary(parts),navVersion:1,anchors,contents,references:uniqueReferences,localLinks,learningVersion:1,learning,wordListVersion:1,wordListLinks:uniqueListLinks,mediaVersion:2,mediaRefs:uniqueMedia };
 }

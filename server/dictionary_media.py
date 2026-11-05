@@ -61,7 +61,10 @@ def media_references(source):
                 if parent.name=='li' and (example:=parent.select_one('.x')) is not None:
                     label='例句 · '+example.get_text();break
         if not label:label=key.rsplit('/',1)[-1]
-        result.append({'key':key,'kind':kind,'variant':variant,'label':' '.join(label.split())[:200]})
+        row={'key':key,'kind':kind,'variant':variant,'label':' '.join(label.split())[:200]}
+        title=' '.join(str(node.get('title','')).split());match=re.match(r'^(.+?) pronunciation(?:\s|$)',title,re.I)
+        if kind=='audio' and match and any(set(parent.get('class',[]))&{'phons_br','phons_n_am'} for parent in list(node.parents)[:4] if isinstance(parent,Tag)):row['pronunciationText']=match[1]
+        result.append(row)
     return result
 
 

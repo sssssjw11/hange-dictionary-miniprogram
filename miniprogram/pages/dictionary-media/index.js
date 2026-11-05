@@ -9,7 +9,7 @@ Page({
   try{
    let entry=await dictionary.lookup(this._query);if(this._closed||generation!==this._load)return;
    if(entry.kind!=='entry')throw new Error('请先打开完整牛津词条，再查看录音和插图');
-   if(entry.oxford&&!entry.oxford.mediaVersion){entry=await dictionary.lookup(this._query,{refresh:true});if(this._closed||generation!==this._load)return;}
+   if(entry.oxford&&Number(entry.oxford.mediaVersion||0)<2){entry=await dictionary.lookup(this._query,{refresh:true});if(this._closed||generation!==this._load)return;}
    if(entry.kind!=='entry'||!entry.oxford||!entry.oxford.mediaVersion)throw new Error('当前词条尚未包含媒体引用，请连接新版词库服务后重试');
    this._sourceSha=entry.oxford.sourceSha256;this._all=entry.oxford.mediaRefs||[];this.setData({word:entry.word,loading:false});this.refresh();
   }catch(error){if(!this._closed&&generation===this._load)this.setData({loading:false,error:error.message});}

@@ -21,3 +21,7 @@ test('continuous playback waits for actual end events and stop resolves an in-fl
 test('continuous playback rejects audio errors instead of advancing as if a word played',async()=>{
  api.request=async()=>({audioPath:'/api/audio/test.mp3'});const pending=media.speakAndWait('Hello.');const check=assert.rejects(pending,/播放未成功/);await new Promise(resolve=>setImmediate(resolve));failed();await check;media.stopAudio();
 });
+
+test('stopping at the audio-start callback prevents even a downloaded recording from starting',async()=>{
+ const before=played;const result=await media.playLocal('owned.wav',()=>media.stopAudio());assert.equal(result.cancelled,true);assert.equal(played,before);
+});

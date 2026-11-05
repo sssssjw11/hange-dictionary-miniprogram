@@ -6,19 +6,21 @@ const sentences = require('../../services/sentences');
 const study = require('../../services/study');
 const codec = require('../../vendor/codec');
 const learning = require('../../utils/oxford-learning');
+const {Pronunciation,voiceLabel}=require('../../services/pronunciation');
 const POS = { n: '名词', v: '动词', a: '形容词', r: '副词' };
 function entryView(result){
   const oxford=result.oxford||{},hasOxford=!!(oxford.blocks||[]).length;
   return {word:result.word,phonetic:result.phonetic||'',phonetics:result.phonetics||oxford.phonetics||{},zh:result.zh||'',en:result.en||'',forms:result.forms||[],learningTags:learning.badges(oxford.learning),matchedFrom:result.referenceLabel?'':result.matchedFrom||'',sourceLabel:result.source==='offline-pack'?'牛津十版 · 全量离线':result.source==='cache'?'已缓存 · 可离线重看':result.source==='builtin'?'内置离线词条':'全量词库',hasOxford,hasContents:hasOxford&&(!!(oxford.contents||[]).length||!oxford.navVersion),hasTeaching:!!result.teaching,hasBase:!!(result.zh||result.en),hasExamples:!!(oxford.examples||[]).length,hasSenses:!!(result.senses||[]).length};
 }
 Page({
-  data: { loading: true, error: '', matches: [], resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], referenceRows:[], relatedTotal:0, relatedPage:0, relatedPages:1, contentsOpen:false,contentsLoading:false,contentsPage:0,contentsPages:1,contentsTotal:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
+  data: { loading: true, error: '', matches: [], resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',voiceStatus:'',speakingVariant:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], referenceRows:[], relatedTotal:0, relatedPage:0, relatedPages:1, contentsOpen:false,contentsLoading:false,contentsPage:0,contentsPages:1,contentsTotal:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
   onLoad(options) { let query,anchor;try{query=decodeURIComponent(options.q||'');}catch(_){query=options.q||'';}try{anchor=decodeURIComponent(options.anchor||'');}catch(_){anchor=options.anchor||'';}this._query=query;this.load(query,{anchor,reference:options.ref==='1',label:ui.decode(options.label).slice(0,256)}); },
   onShow() { ui.apply(this); if (this._entry) this.refreshFavorite(); },
   async load(word,options={}) {
+    this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation)this._pronunciation.cancel();
     const generation = (this._generation || 0) + 1; this._generation = generation; this._query = word;
     this._entry = null; this._matchCursors=[0]; this._matchTarget=null;this._focus=null;this._requestedAnchor=String(options.anchor||'').slice(0,1024);
-    this.setData({ loading: true, error: '', matches: [], entry: null, resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'',supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',contentsOpen:false,contentsLoading:false,contentsPage:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false });
+    this.setData({ loading: true, error: '', matches: [], entry: null, resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'',supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'',voiceStatus:'',speakingVariant:'',contentsOpen:false,contentsLoading:false,contentsPage:0,contentsRows:[],localJumpRows:[],wordListsOpen:false,wordListsLoading:false,wordListsError:'',wordListRows:[],wordListPage:0,wordListPages:1,wordListTotal:0,focusLabel:'',focusError:'',referenceLoading:false });
     try {
       const result = options.entry||await dictionary.lookup(word); if (this._generation !== generation) return;
       if (result.kind !== 'entry') {
@@ -163,10 +165,18 @@ Page({
   onNote(event) { this.setData({ note: event.detail.value, noteStatus: '尚未保存' }); },
   onSaveNote() { if (!this._entry) return; try { store.saveNote(this._entry.word, this._entry.brief || this._entry.zh || (this._entry.teaching || {}).title, this.data.note); this.setData({ favorite: true, noteStatus: '已保存到本机' }); wx.showToast({ title: '笔记已保存', icon: 'success' }); } catch (error) { ui.error(error); } },
   onCopy() { if (this._entry) wx.setClipboardData({ data: this._entry.word }); },
-  async onSpeak(event){if(!this._entry)return;try{const data=await media.speak(this._entry.word,ui.dataset(event,'variant')||'US');if(data.variantFallback)wx.showToast({title:'已用本机可用的 '+data.locale+' 音色朗读',icon:'none'});}catch(error){ui.error(error);}},
+  async onSpeak(event){
+    if(!this._entry)return;const variant=ui.dataset(event,'variant')==='UK'?'UK':'US';
+    if(this.data.speakingVariant===variant){this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation)this._pronunciation.cancel();this.setData({speakingVariant:'',voiceStatus:'已停止发音'});return;}
+    const generation=this._voiceGeneration=(this._voiceGeneration||0)+1;if(!this._pronunciation)this._pronunciation=new Pronunciation();this.setData({speakingVariant:variant,voiceStatus:'正在准备发音…'});
+    try{await this._pronunciation.play(this._entry,{variant,onStart:info=>{if(generation===this._voiceGeneration)this.setData({voiceStatus:voiceLabel(info)});}});}
+    catch(error){if(generation===this._voiceGeneration){this.setData({voiceStatus:error.message});ui.error(error);}}
+    finally{if(generation===this._voiceGeneration)this.setData({speakingVariant:''});}
+  },
   onAI(){if(this._entry){getApp().globalData.aiWord=this._entry.word;wx.switchTab({url:'/pages/ai/index'});}},
   onKnown(){if(!this._entry)return;try{study.known(this._entry.word,true);wx.showToast({title:'已标为掌握'});}catch(error){ui.error(error);}},
   onSaveExample(event){if(!this._entry)return;const index=this.data.page*8+Number(ui.dataset(event,'index'));const item=((this._entry.oxford||{}).examples||[])[index];if(item)try{sentences.save(item.en,item.zh,'牛津十版 · '+this._entry.word);wx.showToast({title:'例句已收藏'});}catch(error){ui.error(error);}},
-  onUnload() { this._generation = (this._generation || 0) + 1;media.stopAudio(); },
+  onHide(){this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation){this._pronunciation.release();this._pronunciation=null;}media.stopAudio();if(!this._unloaded)this.setData({speakingVariant:'',voiceStatus:''});},
+  onUnload() { this._unloaded=true;this._generation = (this._generation || 0) + 1;this.onHide(); },
   onShareAppMessage() { const anchor=this._requestedAnchor||'',unique=((((this._entry||{}).oxford||{}).anchors||[]).filter(row=>row.id===anchor).length===1);return { title: this._entry ? this._entry.word + ' · 涵词典' : '涵词典', path: '/pages/entry/index?q=' + encodeURIComponent(this._query)+(anchor&&unique?'&anchor='+encodeURIComponent(anchor):'')+(this._entry&&this._entry.referenceLabel?'&ref=1&label='+encodeURIComponent(this._entry.referenceLabel):'') }; }
 });
