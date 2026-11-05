@@ -84,7 +84,7 @@ function write(name, controller, width = 390, fileName = name) {
       }
       if(name==='entry'){
         const original=JSON.parse(JSON.stringify(controller.data)),originalEntry=controller._entry;
-        for(const variant of ['matches','matches-last','matches-error','related','supplement-loading','supplement-error','supplement-wordnet','contents','focus','focus-missing']){
+        for(const variant of ['matches','matches-last','matches-error','related','supplement-loading','supplement-error','supplement-wordnet','contents','focus','focus-missing','spelling','spelling-empty']){
           controller._entry=originalEntry;controller._focus=null;controller.setData(original);
           if(['contents','focus','focus-missing'].includes(variant)){
             const codec=require('../miniprogram/vendor/codec');
@@ -92,6 +92,8 @@ function write(name, controller, width = 390, fileName = name) {
             controller._entry=Object.assign({},originalEntry,{oxford});controller.setData({source:'oxford',entry:Object.assign({},original.entry,{hasContents:true}),contentsOpen:variant==='contents'});controller.contentsPage(0);controller.contentPage(0);
             if(variant==='focus')controller.focusTarget(oxford.contents.find(row=>row.kind==='义项'),'2. 包含中文与 English 的原创布局示例，用于检查长定位说明的完整换行。');
             if(variant==='focus-missing')controller.focusAnchor('absent-source-target');
+          }else if(variant==='spelling'||variant==='spelling-empty'){
+            controller.setData({entry:null,loading:false,resultKind:'missing',suggestionKind:'spelling',partial:false,matchQuery:variant==='spelling'?'semantci':'a'.repeat(256),matchPage:0,matchNextCursor:null,matchLoading:false,matchError:'',error:variant==='spelling'?'未找到这个拼写，选择下面的词条继续查词。':'本地词库暂未匹配到，可调整拼写或查询原形。',matches:variant==='spelling'?[{word:'semantic',meaning:'原创布局示例 · 单词释义与双语内容在词条内完整显示。'}]:[]});
           }else if(variant==='related'){
             controller._entry.related=Array.from({length:75},(_,index)=>'original related expression '+index);controller.relatedPage(3);
           }else if(variant.startsWith('supplement-')){

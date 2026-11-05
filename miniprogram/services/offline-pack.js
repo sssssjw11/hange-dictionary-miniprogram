@@ -1,6 +1,7 @@
 const codec = require('../vendor/codec');
 const store = require('../utils/store');
 const chineseSearch = require('../utils/chinese');
+const spelling = require('../utils/spelling');
 const POINTER = 'hange.oxford.pack.v1';
 const SAFE_NAME = /^(manifest\.json|NOTICE\.txt|lengths\.bin|keys\/[0-9a-f]{2}\.json|prefix\/[0-9a-f]{2}\.json|docs\/[0-9]{3}\.json|zh\/[0-9a-f]{2}\.z|parts\/[0-9]{3}\.bin)$/;
 let active = null, restoring = null, installing = false;
@@ -125,6 +126,42 @@ async function chinese(pack, term, cursor) {
   state.pages.set(cursor,result);return result;
 }
 async function suggest(word){const pack=await restore(),key=store.key(word);if(!pack||!pack.manifest.prefixIndex||!key||chineseSearch.hasHan(key))return [];const first=Array.from(key)[0],file='prefix/'+codec.hashBucket(first).toString(16).padStart(2,'0')+'.json';const items=(await jsonFile(pack,file))[first]||[],rows=[];for(const item of items){if(store.key(item[0]).startsWith(key)){const row=await metadata(pack,item[1]),meaning=pack.manifest.summaryVersion>=2?row[4]:codec.oxfordSummary((await document(pack,item[1])).html);rows.push({word:item[0],meaning});if(rows.length===10)break;}}return rows;}
+async function spellingIndex(pack){
+  if(pack.spellingIndex)return pack.spellingIndex;
+  if(pack.loadingSpelling)return pack.loadingSpelling;
+  const task=(async()=>{
+    const groups=new Map(),seen=new Set(),names=Object.keys(pack.manifest.files).filter(name=>name.startsWith('prefix/')&&pack.manifest.files[name].bytes>2);
+    for(let start=0;start<names.length;start+=8){
+      const batches=await Promise.all(names.slice(start,start+8).map(name=>jsonFile(pack,name)));
+      for(const values of batches)for(const items of Object.values(values))for(const [word,id] of items){
+        const key=store.key(word);if(seen.has(key)||!spelling.eligible(key,1))continue;seen.add(key);
+        const length=Array.from(key).length;if(!groups.has(length))groups.set(length,[]);groups.get(length).push({key,word,id});
+      }
+    }
+    // Include the supplied inflected forms and aliases, not just headwords.
+    // Compact lookup markers and numbered internal aliases stay out of the UI.
+    const keyFiles=Object.keys(pack.manifest.files).filter(name=>name.startsWith('keys/')&&pack.manifest.files[name].bytes>2);
+    for(let start=0;start<keyFiles.length;start+=8){
+      const batches=await Promise.all(keyFiles.slice(start,start+8).map(name=>jsonFile(pack,name)));
+      for(const values of batches)for(const [key,ids] of Object.entries(values)){
+        if(key.charCodeAt(0)===1||seen.has(key)||/ \d+$/.test(key)||!spelling.eligible(key,1))continue;
+        seen.add(key);const length=Array.from(key).length;if(!groups.has(length))groups.set(length,[]);groups.get(length).push({key,word:key,id:ids[0]});
+      }
+    }
+    pack.spellingIndex=groups;return groups;
+  })();
+  pack.loadingSpelling=task;try{return await task;}finally{pack.loadingSpelling=null;}
+}
+async function correct(word){
+  const key=store.key(word);if(!spelling.eligible(key))return [];
+  const pack=await restore();if(!pack||!pack.manifest.prefixIndex)return [];
+  if((await references(pack,key)).length)return [];
+  const groups=await spellingIndex(pack),length=Array.from(key).length,tolerance=length<5?1:2,candidates=[];
+  for(let size=length-tolerance;size<=length+tolerance;size++)for(const item of groups.get(size)||[])candidates.push(item);
+  const selected=spelling.rank(key,candidates),rows=[];
+  for(const item of selected){const meta=await metadata(pack,item.id),meaning=pack.manifest.summaryVersion>=2?meta[4]:codec.oxfordSummary((await document(pack,item.id)).html);rows.push({word:item.word,meaning});}
+  return rows;
+}
 async function zipEntries(path) {
   const size = await stat(path); if (size < 22 || size > 160*1024*1024) throw new Error('词库压缩分卷体积异常');
   const tailLength = Math.min(size, 65557), tail = await chunk(path, size - tailLength, tailLength); let end = -1;
@@ -180,4 +217,4 @@ async function installPack(paths, progress) {
 }
 async function install(paths,progress){if(installing)throw new Error('已有词库导入正在进行');installing=true;progressState={working:true,progress:0,message:'检查词库分卷',error:''};try{const result=await installPack(paths,(message,value)=>{progressState={working:true,message,progress:Math.min(100,Math.round(value)),error:''};if(progress)progress(message,value);});progressState.message='牛津词库已完整导入';return result;}catch(error){progressState.error=error.message;progressState.message='导入未完成，学习记录保持不变';throw error;}finally{installing=false;progressState.working=false;}}
 async function remove() { if(installing)throw new Error('请等待当前词库导入结束');active = null; restoring = null; const root = pathRoot(); if (!root.startsWith(wx.env.USER_DATA_PATH + '/')) throw new Error('非法词库路径'); try { await call('rmdir', { dirPath: root, recursive: true }); } catch (error) { if (!missing(error)) throw error; } await clearStages();wx.removeStorageSync(POINTER);progressState={working:false,progress:0,message:'离线词库已移除',error:''}; }
-module.exports = { lookup, status, progress(){return Object.assign({},progressState);}, suggest, install, remove, zipEntries, validateManifest, _reset() { active = null; restoring = null; } };
+module.exports = { lookup, status, progress(){return Object.assign({},progressState);}, suggest, correct, install, remove, zipEntries, validateManifest, _reset() { active = null; restoring = null; } };

@@ -50,6 +50,33 @@ test('Android-compatible backups merge without overwriting notes; invalid input 
   assert.throws(() => store.importJson('{broken'));
 });
 
+test('missing spelling queries remain explicit and a suggestion opens a separate native page',async()=>{
+  const lookup=dictionary.lookup,navigate=wx.navigateTo;
+  dictionary.lookup=async word=>word==='semantic'?{kind:'entry',word,zh:'原创释义',oxford:{blocks:[]}}:{kind:'missing',requested:word,source:'offline-pack',suggestionKind:'spelling',suggestions:[{word:'semantic',meaning:'原创释义'}]};
+  try{
+    const entry=page('entry');await entry.load('semantci');assert.equal(entry.data.resultKind,'missing');assert.equal(entry.data.matchQuery,'semantci');assert.equal(entry.data.entry,null);assert.deepEqual(store.history(),[]);
+    let destination;wx.navigateTo=o=>{destination=o.url;};entry.onWord({currentTarget:{dataset:{word:'semantic'}}});assert.equal(destination,'/pages/entry/index?q=semantic');assert.equal(entry.data.matchQuery,'semantci');assert.equal(entry.data.matches[0].word,'semantic');
+    const opened=page('entry');await opened.load('semantic');assert.equal(opened.data.entry.word,'semantic');assert.deepEqual(store.history().map(row=>row.word),['semantic']);
+  }finally{dictionary.lookup=lookup;wx.navigateTo=navigate;}
+});
+
+test('offline miss returns real pack suggestions once, preserves exact local words and retries service failures locally',async()=>{
+  const pack=require('../miniprogram/services/offline-pack'),status=pack.status,lookup=pack.lookup,suggest=pack.suggest,correct=pack.correct,request=wx.request;let corrections=0;
+  try{
+    store.saveSettings({online:false});pack.status=async()=>({installed:true});pack.lookup=async()=>null;pack.suggest=async()=>[];
+    pack.correct=async()=>{corrections++;return[{word:'semantic',meaning:'原创释义'}];};
+    const [first,second]=await Promise.all([dictionary.lookup('semantci'),dictionary.lookup('semantci')]);assert.equal(corrections,1);assert.equal(first,second);assert.equal(first.kind,'missing');assert.equal(first.suggestionKind,'spelling');assert.equal(first.suggestions[0].word,'semantic');assert.equal(requestCalls,0);
+    assert.equal((await dictionary.lookup('run')).kind,'entry');assert.equal(corrections,1);
+    store.saveSettings({online:true,apiBase:'http://localhost:18759'});wx.request=o=>o.success({statusCode:o.url.endsWith('/health')?200:500,data:o.url.endsWith('/health')?{ready:true}:{error:'temporary dictionary failure'}});
+    dictionary.reset();const fallback=await dictionary.lookup('semantci');assert.equal(fallback.source,'offline-pack');assert.equal(fallback.suggestions[0].word,'semantic');
+    wx.request=o=>o.success({statusCode:200,data:o.url.endsWith('/health')?{ready:true}:{kind:'missing',suggestions:[]}});let failed=0;pack.correct=async()=>{failed++;throw new Error('original index read failure');};await assert.rejects(dictionary.lookup('semantci'),/index read failure/);assert.equal(failed,1);
+  }finally{pack.status=status;pack.lookup=lookup;pack.suggest=suggest;pack.correct=correct;wx.request=request;}
+});
+
+test('without the full dictionary, spelling suggestions identify the builtin scope',async()=>{
+  store.saveSettings({online:false});const result=await dictionary.lookup('semantci');assert.equal(result.kind,'missing');assert.equal(result.partial,true);assert.equal(result.source,'builtin');assert.ok(result.suggestions.some(row=>row.word==='semantic'));
+});
+
 test('reverse page navigation preserves the list on failure, ignores a stale response and opens a word on a separate native page',async()=>{
   const lookup=dictionary.lookup,matchPage=dictionary.matchPage,navigate=wx.navigateTo;
   let release,fail=false,calls=0;

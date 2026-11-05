@@ -119,6 +119,26 @@ test('reverse pagination reaches every unique word, ignores false positives, and
   }finally{await pack.remove();}
 });
 
+test('native spelling index uses actual headwords, retries a failed read, and reuses the compact index',async()=>{
+  const folder=path.join(temp,'spelling-builder');fs.mkdirSync(folder);const source=path.join(folder,'source.db');
+  let result=spawnSync('python',[path.join(project,'tests/spelling_fixture.py'),source],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  result=spawnSync('python',[path.join(project,'scripts/build_offline_pack.py'),'--database',source,'--output',path.join(folder,'pack.zip')],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  const report=JSON.parse(fs.readFileSync(path.join(folder,'offline-pack-verification.json'),'utf8')),originalRead=mock.readFile;
+  try{
+    await pack.install(report.volumes.map(row=>path.join(folder,row.name)));let failed=false;
+    mock.readFile=o=>{if(!failed&&o.filePath.includes('/prefix/')){failed=true;o.fail({errMsg:'temporary spelling read failure'});return;}originalRead(o);};
+    await assert.rejects(pack.correct('qpple'),/temporary spelling/);mock.readFile=originalRead;
+    assert.ok((await pack.correct('qpple')).some(row=>row.word==='apple'));readCounts.clear();
+    for(const [typed,actual] of [['subordnate','subordinate'],['pitfalll','pitfall'],['collacation','collocation'],['semantci','semantic'],['interpersonal skils','interpersonal skills'],['eclair','éclair'],['ix','I'],['recieving','receiving'],['housess','houses']]){
+      const rows=await pack.correct(typed);assert.ok(rows.some(row=>row.word===actual),typed);assert.ok(rows.length<=8);assert.ok(rows.every(row=>row.meaning.includes('原创释义')));assert.equal(new Set(rows.map(row=>row.word.toLowerCase())).size,rows.length);
+    }
+    assert.ok([...readCounts.keys()].every(name=>!name.includes('/prefix/')),'Warm corrections reuse the local word index');
+    assert.ok(!(await pack.correct('run x')).some(row=>/run[_ ]1/.test(row.word)));
+    for(const word of ['Semantic','ran','receiving','houses','苹果','🙂','a','a'.repeat(257),'zzzzzzzzzzzzzzzzzz'])assert.deepEqual(await pack.correct(word),[],word);
+    assert.equal((await pack.lookup('ran')).word,'run');assert.equal((await pack.lookup('receiving')).word,'receive');assert.equal((await pack.lookup('run 1')).word,'run');assert.ok(peakReads<=8);
+  }finally{mock.readFile=originalRead;await pack.remove();}
+});
+
 test('real private pack: import all volumes, full native lookup, aliases, Chinese reverse lookup, and removal', async t => {
   const reportFile = path.join(output, 'offline-pack-verification.json');
   if (!fs.existsSync(reportFile)) { t.skip('Private generated pack is absent'); return; }
@@ -145,6 +165,11 @@ test('real private pack: import all volumes, full native lookup, aliases, Chines
   const text = run.oxford.blocks.map(block => nodesText(block.nodes)).join('');
   assert.equal(run.oxford.chineseNodes, 269);
   assert.ok(text.includes('run')); assert.ok(/[\u3400-\u9fff]/.test(text));
-  fs.writeFileSync(path.join(output, 'native-offline-verification.json'), JSON.stringify({ native_js_decoder: true, simulated_wechat_fs: true, wechat_runtime_tested: false, full_import_sha256: 'passed', definitions: state.definitions, redirects: state.redirects, chinese_reverse: 'passed', checks }, null, 2));
+  const spellingChecks=[];
+  for(const [typed,expected] of [['subordnate','subordinate'],['colloaction','collocation'],['semantci','semantic'],['chronologcial','chronological'],['qpple','apple'],['reach otu','reach out'],['recieving','receiving'],['housess','houses']]){
+    const start=Date.now(),rows=await pack.correct(typed);assert.ok(rows.some(row=>row.word===expected),typed);assert.ok(rows.length<=8);assert.equal(new Set(rows.map(row=>row.word.toLowerCase())).size,rows.length);
+    const opened=await pack.lookup(expected);assert.equal(opened.kind,'entry');assert.ok(opened.oxford.blocks.length);spellingChecks.push({typed,expected,canonicalWord:opened.word,suggestions:rows.length,milliseconds:Date.now()-start});
+  }
+  fs.writeFileSync(path.join(output, 'native-offline-verification.json'), JSON.stringify({ native_js_decoder: true, simulated_wechat_fs: true, wechat_runtime_tested: false, full_import_sha256: 'passed', definitions: state.definitions, redirects: state.redirects, chinese_reverse: 'passed', spellingChecks, checks }, null, 2));
   await pack.remove(); assert.equal((await pack.status()).installed, false); assert.equal(store.favorite('run').note, 'must survive dictionary replacement');
 });

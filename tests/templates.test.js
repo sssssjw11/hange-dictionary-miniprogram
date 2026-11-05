@@ -37,3 +37,9 @@ test('contents rows and source focus blocks use native buttons and addressable o
   const data={loading:false,theme:'light',entry:{word:'demo',hasOxford:true,hasContents:true,forms:[]},source:'oxford',contentsOpen:true,contentsRows:[{key:'0-0',index:0,kind:'义项',label:'2. 原文义项'}],contentsPages:1,localJumpRows:[],oxfordBlocks:[{id:'0-1-focus',nodes:[{type:'text',text:'Original source fragment'}]}],totalPages:1,relatedTotal:1,referenceRows:[{index:0,label:'other (2)',word:'other',anchor:'second'}]};
   const result=compile('pages/entry/index.wxml')(data),all=nodes(result);assert.ok(text(result).includes('牛津目录'));assert.ok(text(result).includes('2. 原文义项'));assert.ok(all.some(node=>node.attr&&node.attr.id==='oxford-0-1-focus'));assert.ok(all.some(node=>node.attr&&node.attr.bindtap==='onReference'));assert.ok(all.some(node=>node.attr&&node.attr.bindtap==='onContentsItem'));
 });
+
+test('spelling suggestions keep the typed query and offer word buttons without Chinese pagination or an irrelevant retry',()=>{
+  const data={loading:false,entry:null,resultKind:'missing',suggestionKind:'spelling',matchQuery:'semantci',matches:[{word:'semantic',meaning:'原创释义'}],error:'未找到这个拼写，选择下面的词条继续查词。',matchPage:0,matchNextCursor:null,partial:false};
+  const result=compile('pages/entry/index.wxml')(data),all=nodes(result),copy=text(result);
+  assert.ok(copy.includes('可能想查')&&copy.includes('semantci')&&copy.includes('semantic'));assert.ok(!copy.includes('第 1 页'));assert.ok(all.some(node=>node.attr&&node.attr.bindtap==='onWord'));assert.ok(!all.some(node=>node.attr&&node.attr.bindtap==='onRetry'));
+});

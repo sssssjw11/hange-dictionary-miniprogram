@@ -21,9 +21,9 @@
     <view class="footer">牛津内容来自自行导入的词库；ECDICT、WordNet 和原创说明分别标明来源。朗读使用本机服务端可用音色，缺少所选英美音色时会明确提示。</view>
   </view>
   <view wx:else>
-    <view id="matches-start" class="page-heading"><text class="eyebrow">{{matchQuery}}</text><view class="title">{{matches.length ? '找到这些词条' : '暂时无法查到'}}</view><view wx:if="{{matches.length}}" class="match-meta"><text>第 {{matchPage+1}} 页 · {{matches.length}} 个词条</text><text wx:if="{{matchLoading}}">正在翻页…</text><text wx:elif="{{matchNextCursor !== null}}">还有更多结果</text><text wx:else>{{matchPage > 0 ? '已到最后一页' : '已显示全部'}}</text></view></view>
-    <view wx:if="{{partial}}" class="info">当前结果来自内置示例；导入离线词库可使用完整牛津反查。</view>
-    <view wx:if="{{error}}" class="card error-card"><text class="muted">{{error}}</text><button class="primary" bindtap="onRetry">重新查询</button></view>
+    <view id="matches-start" class="page-heading"><text class="eyebrow">{{matchQuery}}</text><view class="title">{{matches.length ? (resultKind === 'missing' ? '可能想查' : '找到这些词条') : '暂时无法查到'}}</view><view wx:if="{{matches.length && resultKind !== 'missing'}}" class="match-meta"><text>第 {{matchPage+1}} 页 · {{matches.length}} 个词条</text><text wx:if="{{matchLoading}}">正在翻页…</text><text wx:elif="{{matchNextCursor !== null}}">还有更多结果</text><text wx:else>{{matchPage > 0 ? '已到最后一页' : '已显示全部'}}</text></view></view>
+    <view wx:if="{{partial}}" class="info">当前结果来自内置词条；导入离线词库可查询完整牛津。</view>
+    <view wx:if="{{error}}" class="card error-card"><text class="muted">{{error}}</text><button wx:if="{{!matches.length || resultKind !== 'missing'}}" class="primary" bindtap="onRetry">重新查询</button></view>
     <view wx:if="{{matches.length}}" class="card"><button wx:for="{{matches}}" wx:key="word" class="word-row" disabled="{{matchLoading}}" data-word="{{item.word}}" bindtap="onWord"><text class="word">{{item.word}}</text><text class="meaning">{{item.meaning}}</text></button></view>
     <view wx:if="{{matches.length && (matchPage > 0 || matchNextCursor !== null)}}" class="pagination match-pagination"><button disabled="{{matchLoading || matchPage === 0}}" bindtap="onMatchPrev">上一页</button><text>{{matchLoading ? '正在翻页…' : '第 '+(matchPage+1)+' 页'}}</text><button disabled="{{matchLoading || matchNextCursor === null}}" bindtap="onMatchNext">下一页</button></view>
     <view wx:if="{{matchError}}" class="info match-error"><text>{{matchError}}</text><button class="text-button" disabled="{{matchLoading}}" bindtap="onMatchRetry">重试翻页</button></view>

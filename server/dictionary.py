@@ -17,6 +17,7 @@ from bs4 import BeautifulSoup, Comment, NavigableString
 from oxford_summary import oxford_summary, visible_soup
 from oxford_navigation import navigation, sense_prefix
 from text_index import normalize, has_han, query_terms, meaning_rank
+from spelling import eligible as spelling_eligible, rank as spelling_rank
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -64,7 +65,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.6.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.7.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -132,6 +133,36 @@ class Engine:
         found=term in normalize(visible_soup(zlib.decompress(body).decode()).get_text())
         with self._chinese_checks_lock:checks[identifier]=found
         return found
+
+    @lru_cache(maxsize=32)
+    def corrections(self, word):
+        key=normalize(word)
+        if not spelling_eligible(key):return []
+        tolerance=1 if len(key)<5 else 2
+        if self.oxford.is_file():
+            with closing(connect(self.oxford)) as db:
+                candidates=({'key':key,'word':word if body else key,'id':identifier,'body':body} for key,word,identifier,body in db.execute(
+                    'SELECT key,word,id,body IS NOT NULL FROM entries WHERE length(key) BETWEEN ? AND ?', (len(key)-tolerance,len(key)+tolerance)) if body or not re.search(r' \d+$',key))
+                selected=spelling_rank(key,candidates)
+                results=[]
+                with (closing(connect(self.chinese_index)) if self.oxford_chinese else nullcontext(None)) as index:
+                    for item in selected:
+                        pages=self._oxford(item['key']) if not item['body'] else None
+                        if pages==[]:continue
+                        identifier=pages[0][0] if pages else item['id']
+                        brief=index.execute('SELECT brief FROM documents WHERE id=?',(identifier,)).fetchone() if index else None
+                        meaning=brief[0] if brief and brief[0] else ''
+                        if not meaning:
+                            html=pages[0][2] if pages else zlib.decompress(db.execute('SELECT body FROM entries WHERE id=?',(identifier,)).fetchone()[0]).decode('utf-8')
+                            meaning=oxford_summary(html)
+                        results.append({'word':item['word'],'meaning':meaning or '牛津十版词条'})
+                return results
+        if self.base.is_file():
+            with closing(connect(self.base)) as db:
+                candidates=({'key':key,'word':word,'meaning':meaning} for key,word,meaning in db.execute(
+                    'SELECT key,word,zh FROM entries WHERE length(key) BETWEEN ? AND ?', (len(key)-tolerance,len(key)+tolerance)))
+                return [{'word':item['word'],'meaning':item['meaning'] or ''} for item in spelling_rank(key,candidates)]
+        return []
 
     def _chinese_rows(self, term):
         seen = set()
@@ -222,7 +253,8 @@ class Engine:
                     data = dict(self.lookup(matches[0]['word']))
                     return dict(data, requested=requested, matchedFrom=requested)
                 return dict(page,requested=requested)
-            return {'kind': 'missing', 'requested': requested, 'suggestions': self.suggest(key)}
+            suggestions=self.suggest(key)
+            return {'kind': 'missing', 'requested': requested, 'source':'service', 'suggestions':suggestions or self.corrections(key), 'suggestionKind':'prefix' if suggestions else 'spelling'}
         data = dict(zip(['word', 'phonetic', 'zh', 'en', 'formsRaw', 'tagsRaw'], row)) if row else {'word': pages[0][1]}
         if pages:
             data['word'] = pages[0][1]

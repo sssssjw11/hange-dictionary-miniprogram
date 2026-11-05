@@ -4,6 +4,7 @@ const store = require('../utils/store');
 const cache = require('../utils/cache');
 const offline = require('../data/offline');
 const offlinePack = require('./offline-pack');
+const spelling = require('../utils/spelling');
 let health = { ready: false, checked: 0, base: '' };
 const pending = new Map();
 function base() { const settings = store.settings(); return settings.online ? String(settings.apiBase === null ? config.apiBase : settings.apiBase).replace(/\/+$/, '') : ''; }
@@ -35,6 +36,24 @@ function local(word, cursor = 0) {
   }
   return null;
 }
+function builtinSuggestions(word){
+  const key=store.key(word);if(!spelling.eligible(key))return {rows:[],kind:''};
+  const items=Object.values(offline.entries).map(row=>({key:store.key(row.word),word:row.word,meaning:row.zh||(row.teaching||{}).title||''}));
+  const prefix=items.filter(row=>row.key.startsWith(key)).sort((a,b)=>a.word.length-b.word.length).slice(0,8);
+  const rows=prefix.length?prefix:spelling.rank(key,items);
+  return {rows:rows.map(row=>({word:row.word,meaning:row.meaning})),kind:prefix.length?'prefix':'spelling'};
+}
+async function missingResult(word,installed,serviceResult){
+  if(serviceResult&&(serviceResult.suggestions||[]).length)return serviceResult;
+  if(installed.installed){
+    const prefix=await offlinePack.suggest(word),rows=prefix.length?prefix:await offlinePack.correct(word);
+    return {kind:'missing',requested:word,source:'offline-pack',offline:true,suggestions:rows,suggestionKind:prefix.length?'prefix':'spelling'};
+  }
+  const builtin=builtinSuggestions(word);
+  if(builtin.rows.length)return {kind:'missing',requested:word,source:'builtin',partial:true,suggestions:builtin.rows,suggestionKind:builtin.kind};
+  if(serviceResult)return serviceResult;
+  throw new Error('当前未连接全量词库，且此词尚未缓存。请连接词库服务后重试。');
+}
 async function lookup(word,options={}) {
   word = String(word || '').trim(); if (!word || word.length > 256 || word.includes('\0')) throw new Error('请输入 1～256 字的单词或短语');
   const key = store.key(word), stored = cache.get(key),pendingKey=key+(options.refresh?'\0refresh':'');
@@ -58,12 +77,13 @@ async function lookup(word,options={}) {
     if(extra&&extra.kind==='supplement'&&store.key(extra.word)===key)fallback=mergeSupplement(fallback||{kind:'entry',word:extra.word,requested:word,source:'cache',oxford:{blocks:[]}},Object.assign({},extra,{source:'cache'}));
     const state = await status(!!options.refresh,true);
     if (state.ready) {
-      try { const entry = await request('lookup', { q: word }); if (entry.kind === 'entry') cache.put(key, entry); return entry; }
-      catch (error) { if (!fallback) throw error; }
+      let entry;
+      try { entry = await request('lookup', { q: word }); }
+      catch (error) { if (!fallback&&!installed.installed&&!builtinSuggestions(word).rows.length) throw error; }
+      if(entry){if(entry.kind==='entry')cache.put(key,entry);if(entry.kind==='missing')return fallback&&fallback.kind==='entry'?fallback:await missingResult(word,installed,entry);return entry;}
     }
     if (fallback) return fallback;
-    if (installed.installed) return {kind:'missing',requested:word,source:'offline-pack',offline:true};
-    throw new Error('当前未连接全量词库，且此词尚未缓存。请连接词库服务后重试。');
+    return missingResult(word,installed);
   })();
   pending.set(pendingKey, task);
   try { return await task; } finally { pending.delete(pendingKey); }
