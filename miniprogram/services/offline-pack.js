@@ -2,6 +2,7 @@ const codec = require('../vendor/codec');
 const store = require('../utils/store');
 const chineseSearch = require('../utils/chinese');
 const spelling = require('../utils/spelling');
+const api=require('./api');
 const POINTER = 'hange.oxford.pack.v1';
 const SAFE_NAME = /^(manifest\.json|NOTICE\.txt|lengths\.bin|keys\/[0-9a-f]{2}\.json|prefix\/[0-9a-f]{2}\.json|docs\/[0-9]{3}\.json|zh\/[0-9a-f]{2}\.z|parts\/[0-9]{3}\.bin)$/;
 let active = null, restoring = null, installing = false;
@@ -197,51 +198,96 @@ async function zipEntries(path) {
   if (end < 0 || view.getUint16(end+4,true) !== 0 || view.getUint16(end+6,true) !== 0) throw new Error('不支持此 ZIP 文件');
   const count = view.getUint16(end+10,true), length = view.getUint32(end+12,true), position = view.getUint32(end+16,true);
   if (count > 1800 || length > 2*1024*1024 || position + length > size) throw new Error('ZIP 文件清单异常');
-  const directory = await chunk(path, position, length), data = new DataView(directory.buffer, directory.byteOffset, directory.byteLength); const entries = []; let offset = 0;
+  const directory = await chunk(path, position, length), data = new DataView(directory.buffer, directory.byteOffset, directory.byteLength); const entries = [],headers=[]; let offset = 0;
   for (let i = 0; i < count; i++) {
     if (offset+46 > directory.length || data.getUint32(offset,true) !== 0x02014b50) throw new Error('ZIP 索引损坏');
     const flags = data.getUint16(offset+8,true), method = data.getUint16(offset+10,true), rawSize = data.getUint32(offset+24,true), nameLength = data.getUint16(offset+28,true), extra = data.getUint16(offset+30,true), comment = data.getUint16(offset+32,true);
     const name = codec.strFromU8(directory.slice(offset+46,offset+46+nameLength));
     const mode = (data.getUint32(offset+38,true) >>> 16) & 0xf000;
     if (flags & 1 || mode === 0xa000 || ![0,8].includes(method) || !SAFE_NAME.test(name) || rawSize > 64*1024*1024) throw new Error('ZIP 中包含不允许的路径或文件');
-    entries.push({ name, bytes: rawSize }); offset += 46+nameLength+extra+comment;
+    headers.push({name,bytes:rawSize,flags,method,compressed:data.getUint32(offset+20,true),position:data.getUint32(offset+42,true)});entries.push({ name, bytes: rawSize }); offset += 46+nameLength+extra+comment;
   }
+  for(let start=0;start<headers.length;start+=8){const results=await Promise.all(headers.slice(start,start+8).map(async entry=>{try{
+    if(entry.position+30>position)throw new Error('ZIP 本地文件信息损坏');
+    const header=await chunk(path,entry.position,30),view=new DataView(header.buffer,header.byteOffset,header.byteLength),flags=view.getUint16(6,true),nameLength=view.getUint16(26,true),extra=view.getUint16(28,true);
+    if(view.getUint32(0,true)!==0x04034b50||flags&1||view.getUint16(8,true)!==entry.method||!nameLength||nameLength>512||entry.position+30+nameLength+extra+entry.compressed>position||(!(flags&8)&&(view.getUint32(18,true)!==entry.compressed||view.getUint32(22,true)!==entry.bytes)))throw new Error('ZIP 本地文件信息不一致');
+    if(codec.strFromU8(await chunk(path,entry.position+30,nameLength))!==entry.name)throw new Error('ZIP 本地路径与清单不一致');
+    }catch(error){return error;}return null;
+  }));const failure=results.find(Boolean);if(failure)throw failure;}
   return entries;
 }
 async function clearStages(){const result=await call('readdir',{dirPath:wx.env.USER_DATA_PATH});for(const name of result.files)if(/^hange-oxford-stage-[0-9]+$/.test(name))await call('rmdir',{dirPath:wx.env.USER_DATA_PATH+'/'+name,recursive:true});}
-async function installPack(paths, progress) {
-  if (paths.length < 1 || paths.length > 5) throw new Error('请选择索引卷和全部数据卷，最多 5 个 ZIP 文件');
-  const state = await status(); if (state.installed) throw new Error('请先移除已安装的词库，再导入新版；生词本和笔记不受影响');
+async function ensureInstallable(){
+  const state=await status();if(state.installed)throw new Error('请先移除已安装的词库，再导入新版；生词本和笔记不受影响');
   if(state.error)throw new Error('请先移除未能读取的旧词库，再重新导入；学习记录会保留');
-  const names = new Set(), declared = []; let total = 0;
-  for (const path of paths) for (const entry of await zipEntries(path)) { if (names.has(entry.name)) throw new Error('选中了重复的词库分卷'); names.add(entry.name); declared.push(entry); total += entry.bytes; }
-  if (!names.has('manifest.json') || total > 181*1024*1024) throw new Error('缺少索引分卷，或词库超出安全容量');
-  const root = pathRoot(), stage = root + '-stage-' + Date.now();
-  await clearStages();
-  if(!wx.getStorageSync(POINTER)){try{await call('stat',{path:root});await call('rmdir',{dirPath:root,recursive:true});}catch(error){if(!missing(error))throw error;}}
-  await call('mkdir', { dirPath: stage, recursive: true });
-  try {
-    for (let i = 0; i < paths.length; i++) { if (progress) progress('解压词库分卷 ' + (i+1) + '/' + paths.length, i/paths.length*30); await call('unzip', { zipFilePath: paths[i], targetPath: stage }); }
-    const manifest = validateManifest(JSON.parse(await read(stage + '/manifest.json','utf8')));
-    if (Object.keys(manifest.files).length + 1 !== names.size || declared.some(file => file.name !== 'manifest.json' && (!manifest.files[file.name] || manifest.files[file.name].bytes !== file.bytes))) throw new Error('缺少词库分卷，或分卷不属于同一版本');
-    let checked = 0;
-    for (const [name, expected] of Object.entries(manifest.files)) {
-      if (await stat(stage + '/' + name) !== expected.bytes) throw new Error('词库分卷不完整：' + name);
-      const digest = codec.sha256.create();
-      for (let offset = 0; offset < expected.bytes; offset += 1024*1024) digest.update(await chunk(stage + '/' + name, offset, Math.min(1024*1024, expected.bytes-offset)));
-      if (codec.hex(digest.digest()) !== expected.sha256) throw new Error('词库校验失败：' + name);
-      checked += expected.bytes; if (progress) progress('核对词库完整性', 30 + checked/manifest.extractedBytes*70);
-    }
-    // Only our fixed dictionary directory may be replaced, never learning data.
-    try { await call('rmdir', { dirPath: root, recursive: true }); } catch (_) {}
-    await call('rename', { oldPath: stage, newPath: root });
-    try { wx.setStorageSync(POINTER, { root, edition: manifest.edition }); }
-    catch (error) { await call('rmdir', { dirPath: root, recursive: true }); throw error; }
-    try { require('../utils/cache').clear(); } catch (_) {}
-    active = null;
-    return status();
-  } catch (error) { try { await call('rmdir', { dirPath: stage, recursive: true }); } catch (_) {} throw error; }
 }
-async function install(paths,progress){if(installing)throw new Error('已有词库导入正在进行');installing=true;progressState={working:true,progress:0,message:'检查词库分卷',error:''};try{const result=await installPack(paths,(message,value)=>{progressState={working:true,message,progress:Math.min(100,Math.round(value)),error:''};if(progress)progress(message,value);});progressState.message='牛津词库已完整导入';return result;}catch(error){progressState.error=error.message;progressState.message='导入未完成，学习记录保持不变';throw error;}finally{installing=false;progressState.working=false;}}
+async function prepareStage(){
+  const root=pathRoot(),stage=root+'-stage-'+Date.now();await clearStages();
+  if(!wx.getStorageSync(POINTER)){try{await call('stat',{path:root});await call('rmdir',{dirPath:root,recursive:true});}catch(error){if(!missing(error))throw error;}}
+  await call('mkdir',{dirPath:stage,recursive:true});return stage;
+}
+async function hashFile(path,bytes){
+  const digest=codec.sha256.create();for(let offset=0;offset<bytes;offset+=1024*1024)digest.update(await chunk(path,offset,Math.min(1024*1024,bytes-offset)));return codec.hex(digest.digest());
+}
+async function completeStage(stage,names,declared,progress){
+  const root=pathRoot(),manifest=validateManifest(JSON.parse(await read(stage+'/manifest.json','utf8')));
+  if(Object.keys(manifest.files).length+1!==names.size||declared.some(file=>file.name!=='manifest.json'&&(!manifest.files[file.name]||manifest.files[file.name].bytes!==file.bytes)))throw new Error('缺少词库分卷，或分卷不属于同一版本');
+  let checked=0;
+  for(const [name,expected]of Object.entries(manifest.files)){
+    if(await stat(stage+'/'+name)!==expected.bytes)throw new Error('词库分卷不完整：'+name);
+    if(await hashFile(stage+'/'+name,expected.bytes)!==expected.sha256)throw new Error('词库校验失败：'+name);
+    checked+=expected.bytes;if(progress)progress('核对词库完整性',30+checked/manifest.extractedBytes*70);
+  }
+  // Only our fixed dictionary directory may be replaced, never learning data.
+  try{await call('rmdir',{dirPath:root,recursive:true});}catch(_){}
+  await call('rename',{oldPath:stage,newPath:root});
+  try{wx.setStorageSync(POINTER,{root,edition:manifest.edition});}catch(error){await call('rmdir',{dirPath:root,recursive:true});throw error;}
+  try{require('../utils/cache').clear();}catch(_){}active=null;return status();
+}
+async function installPack(paths,progress){
+  if(paths.length<1||paths.length>5)throw new Error('请选择索引卷和全部数据卷，最多 5 个 ZIP 文件');
+  await ensureInstallable();const names=new Set(),declared=[];let total=0;
+  for(const path of paths)for(const entry of await zipEntries(path)){if(names.has(entry.name))throw new Error('选中了重复的词库分卷');names.add(entry.name);declared.push(entry);total+=entry.bytes;}
+  if(!names.has('manifest.json')||total>181*1024*1024)throw new Error('缺少索引分卷，或词库超出安全容量');
+  const stage=await prepareStage();
+  try{for(let i=0;i<paths.length;i++){if(progress)progress('解压词库分卷 '+(i+1)+'/'+paths.length,i/paths.length*30);await call('unzip',{zipFilePath:paths[i],targetPath:stage});}return await completeStage(stage,names,declared,progress);}
+  catch(error){try{await call('rmdir',{dirPath:stage,recursive:true});}catch(_){}throw error;}
+}
+function validateTransfer(data){
+  if(!data||!data.available)throw new Error(data&&data.reason||'配套服务未提供可下载的词库分卷');
+  const sha=value=>typeof value==='string'&&/^[0-9a-f]{64}$/.test(value),volumes=data.volumes;
+  if(!sha(data.buildId)||!sha(data.sourceSha256)||!sha(data.manifestSha256)||!Array.isArray(volumes)||volumes.length<1||volumes.length>5||volumes.some(row=>!row||typeof row!=='object')||volumes[0].role!=='index'||volumes.slice(1).some(row=>row.role!=='data')||!Number.isInteger(data.extractedBytes)||data.extractedBytes<1||data.extractedBytes>180*1024*1024)throw new Error('服务返回的词库传输清单无效');
+  const names=new Set();for(const volume of volumes){if(!volume||typeof volume.name!=='string'||!volume.name||volume.name.length>160||/[\\/:\x00-\x1f]/.test(volume.name)||!volume.name.toLowerCase().endsWith('.zip')||names.has(volume.name)||!sha(volume.sha256)||!Number.isInteger(volume.bytes)||volume.bytes<22||volume.bytes>64*1024*1024)throw new Error('服务分卷信息无效');names.add(volume.name);}
+  if(data.totalBytes!==volumes.reduce((sum,row)=>sum+row.bytes,0))throw new Error('服务分卷总大小不一致');return data;
+}
+function downloadVolume(url,volume,onProgress){
+  if(!store.settings().online)return Promise.reject(new Error('网络服务已关闭，词库导入未完成'));
+  return new Promise((resolve,reject)=>{let finished=false;const task=wx.downloadFile({url,timeout:120000,success:response=>{finished=true;if(response.statusCode===200&&response.tempFilePath)resolve(response.tempFilePath);else{if(response.tempFilePath)call('unlink',{filePath:response.tempFilePath}).catch(()=>{});reject(new Error('词库分卷下载失败，请重试'));}},fail:()=>{finished=true;reject(new Error('词库下载中断，请检查连接后重新导入'));}});if(task&&task.onProgressUpdate)task.onProgressUpdate(value=>{if(!finished&&onProgress)onProgress(Math.max(0,Math.min(volume.bytes,Number(value.totalBytesWritten)||0)));});});
+}
+async function installServicePack(progress){
+  await ensureInstallable();const origin=api.base();let response;
+  try{response=await api.request('offline-pack');}catch(error){if(error.message==='接口不存在')throw new Error('请更新配套服务后再下载词库分卷');throw error;}
+  const data=validateTransfer(response),stage=await prepareStage(),names=new Set(),declared=[];let total=0,downloaded=0;
+  try{
+    for(let i=0;i<data.volumes.length;i++){
+      const volume=data.volumes[i],message='下载词库分卷 '+(i+1)+'/'+data.volumes.length;if(progress)progress(message,downloaded/data.totalBytes*30);
+      let archive;
+      try{
+        archive=await downloadVolume(origin+'/api/offline-pack/file?buildId='+encodeURIComponent(data.buildId)+'&volume='+i,volume,written=>{if(progress)progress(message,(downloaded+written)/data.totalBytes*30);});
+        if(await stat(archive)!==volume.bytes||await hashFile(archive,volume.bytes)!==volume.sha256)throw new Error('下载分卷校验失败：'+volume.name);
+        const entries=await zipEntries(archive);
+        for(const entry of entries){if(names.has(entry.name))throw new Error('服务分卷包含重复文件');names.add(entry.name);declared.push(entry);total+=entry.bytes;}
+        if(total>181*1024*1024||i===0&&!names.has('manifest.json'))throw new Error('服务分卷缺少索引或超出安全容量');
+        downloaded+=volume.bytes;if(progress)progress('解压词库分卷 '+(i+1)+'/'+data.volumes.length,downloaded/data.totalBytes*30);
+        await call('unzip',{zipFilePath:archive,targetPath:stage});
+        if(i===0){const raw=await read(stage+'/manifest.json');if(codec.hex(codec.sha256(raw))!==data.manifestSha256)throw new Error('词库清单与服务版本不一致');const manifest=validateManifest(JSON.parse(codec.strFromU8(raw)));if(manifest.sourceSha256!==data.sourceSha256||manifest.extractedBytes!==data.extractedBytes)throw new Error('下载的词库来源不一致');}
+      }finally{if(archive)try{await call('unlink',{filePath:archive});}catch(_){}}
+    }
+    return await completeStage(stage,names,declared,progress);
+  }catch(error){try{await call('rmdir',{dirPath:stage,recursive:true});}catch(_){}throw error;}
+}
+async function runInstall(operation,progress){if(installing)throw new Error('已有词库导入正在进行');installing=true;progressState={working:true,progress:0,message:'检查词库分卷',error:''};try{const result=await operation((message,value)=>{progressState={working:true,message,progress:Math.min(100,Math.round(value)),error:''};if(progress)progress(message,value);});progressState.message='牛津词库已完整导入';return result;}catch(error){progressState.error=error.message;progressState.message='导入未完成，学习记录保持不变';throw error;}finally{installing=false;progressState.working=false;}}
+async function install(paths,progress){return runInstall(notify=>installPack(paths,notify),progress);}
+async function installFromService(progress){return runInstall(installServicePack,progress);}
 async function remove() { if(installing)throw new Error('请等待当前词库导入结束');active = null; restoring = null; const root = pathRoot(); if (!root.startsWith(wx.env.USER_DATA_PATH + '/')) throw new Error('非法词库路径'); try { await call('rmdir', { dirPath: root, recursive: true }); } catch (error) { if (!missing(error)) throw error; } await clearStages();wx.removeStorageSync(POINTER);progressState={working:false,progress:0,message:'离线词库已移除',error:''}; }
-module.exports = { lookup, status, progress(){return Object.assign({},progressState);}, suggest, correct, wordListCatalog, wordList, install, remove, zipEntries, validateManifest, _reset() { active = null; restoring = null; } };
+module.exports = { lookup, status, progress(){return Object.assign({},progressState);}, suggest, correct, wordListCatalog, wordList, install, installFromService, remove, zipEntries, validateManifest, _reset() { active = null; restoring = null; } };

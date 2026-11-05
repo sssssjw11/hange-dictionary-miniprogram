@@ -9,6 +9,7 @@
       <view wx:for="{{selectedFiles}}" wx:key="key" class="selected-volume"><view class="volume-name"><text>{{item.name}}</text><text class="small muted">{{item.size}}</text></view><button class="text-button" disabled="{{working}}" data-index="{{index}}" bindtap="onRemoveFile" aria-label="移除此待导入分卷">移除</button></view>
       <view class="actions"><button class="choose-volumes" disabled="{{working || broken}}" bindtap="onChooseFiles">添加分卷</button><button class="primary install-volumes" disabled="{{working || broken || !selectedFiles.length}}" bindtap="onImport">开始导入</button></view>
       <view class="small muted">已选 {{selectedFiles.length}} 个 ZIP；离开此页面后需要重新选择。</view>
+      <view class="service-import"><button class="primary" disabled="{{working || broken}}" bindtap="onImportService">从配套服务导入</button><view class="small muted">已在电脑准备分卷时，可直接逐卷下载并校验。手机需能访问已配置的服务地址。</view></view>
     </view>
     <view wx:if="{{installed || broken}}" class="actions"><button disabled="{{working}}" bindtap="onRemove">移除词库</button></view>
     <view wx:if="{{working}}"><progress percent="{{progress}}" active="{{true}}" stroke-width="6" activeColor="{{accent}}"/><view class="small muted">{{message}} · {{progress}}%</view></view>

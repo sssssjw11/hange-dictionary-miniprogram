@@ -189,6 +189,9 @@ def main():
             archive.write(file, file.relative_to(stage).as_posix())
         volumes.append({'name': destination.name, 'bytes': destination.stat().st_size})
     assert all(volume['bytes'] < 96*1024*1024 for volume in volumes)
+    if len(manifest.get('sourceSha256',''))==64 and all(char in '0123456789abcdef' for char in manifest['sourceSha256']):
+        from pack_transfer import prepare_index,REGISTRY
+        prepare_index([args.output.parent/volume['name'] for volume in volumes],args.output.parent/REGISTRY)
     report = {key: value for key, value in manifest.items() if key != 'files'}
     report.update(zipBytes=args.output.stat().st_size, volumes=volumes, allRedirectsResolved=True)
     (args.output.parent / 'offline-pack-verification.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), 'utf-8')

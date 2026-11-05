@@ -12,11 +12,13 @@ from urllib.parse import parse_qs, urlparse
 from dictionary import Engine
 from features import Features, Unavailable
 from documents import extract as extract_document
+from pack_transfer import PackTransfer
 
 
 class Handler(BaseHTTPRequestHandler):
     engine = None
     features = None
+    transfer = None
 
     def do_GET(self):
         route = urlparse(self.path)
@@ -42,6 +44,12 @@ class Handler(BaseHTTPRequestHandler):
                 data = {'rows': self.engine.word_list_catalog()}
             elif route.path == '/api/wordlist':
                 data = self.engine.word_list(query.get('id',[''])[0])
+            elif route.path == '/api/offline-pack':
+                if self.transfer is None:self.transfer=PackTransfer()
+                data=self.transfer.info()
+            elif route.path == '/api/offline-pack/file':
+                if self.transfer is None:self.transfer=PackTransfer()
+                return self.send_file(self.transfer.volume(query.get('buildId',[''])[0],int(query.get('volume',['-1'])[0])),'application/zip')
             elif route.path == '/api/dictionary-media/status':
                 data = self.engine.media.status()
             elif route.path == '/api/dictionary-media/file':
@@ -53,7 +61,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as error:
             self.respond(400, {'error': str(error)})
         except FileNotFoundError as error:
-            self.respond(404 if route.path.startswith(('/api/audio/','/api/dictionary-media/')) else 503, {'error': str(error)})
+            self.respond(404 if route.path.startswith(('/api/audio/','/api/dictionary-media/','/api/offline-pack/')) else 503, {'error': str(error)})
         except Exception:
             self.respond(500, {'error': '本地词库查询失败，请检查服务端控制台'})
             import traceback
@@ -103,15 +111,18 @@ class Handler(BaseHTTPRequestHandler):
         return fields,blob
 
     def send_audio(self,path):
+        return self.send_file(path,'audio/mpeg' if path.suffix=='.mp3' else 'audio/wav')
+
+    def send_file(self,path,mime):
         total=path.stat().st_size;start=0;end=total-1;status=200
         header=self.headers.get('Range')
         if header:
             match=re.fullmatch(r'bytes=(\d+)-(\d*)',header)
-            if not match:return self.respond(416,{'error':'音频范围无效'})
+            if not match:return self.respond(416,{'error':'文件范围无效'})
             start=int(match[1]);end=min(end,int(match[2])) if match[2] else end
-            if start>end or start>=total:return self.respond(416,{'error':'音频范围超出文件'})
+            if start>end or start>=total:return self.respond(416,{'error':'文件范围超出文件'})
             status=206
-        self.send_response(status);self.send_header('Content-Type','audio/mpeg' if path.suffix=='.mp3' else 'audio/wav');self.send_header('Accept-Ranges','bytes');self.send_header('Content-Length',str(end-start+1));self.send_header('Cache-Control','private, max-age=86400')
+        self.send_response(status);self.send_header('Content-Type',mime);self.send_header('Accept-Ranges','bytes');self.send_header('Content-Length',str(end-start+1));self.send_header('Cache-Control','private, max-age=86400')
         if status==206:self.send_header('Content-Range','bytes %d-%d/%d'%(start,end,total))
         self.end_headers()
         with path.open('rb') as source:
@@ -152,9 +163,11 @@ def main():
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=18748)
     parser.add_argument('--data-dir', type=Path)
+    parser.add_argument('--pack-dir',type=Path,help='Private ZIP volumes and offline-pack-transfer.json')
     args = parser.parse_args()
     Handler.engine = Engine(args.data_dir)
     Handler.features = Features()
+    Handler.transfer=PackTransfer(args.pack_dir,Handler.engine.oxford_source_sha)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print('Dictionary API: http://%s:%s/api/health' % (args.host, args.port), flush=True)
     try:

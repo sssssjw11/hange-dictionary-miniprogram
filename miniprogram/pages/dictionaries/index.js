@@ -52,6 +52,13 @@ Page({
     }catch(error){this.update({error:error.message,message:'导入未完成，已选分卷保留，可补齐后重试'});}
     finally{this.update({working:false});}
   },
+  async onImportService(){
+    if(this.data.working||this.data.installed||this.data.broken)return;
+    this._attempted=true;this.update({working:true,progress:0,message:'读取配套服务的分卷清单',error:''});
+    try{await pack.installFromService((message,progress)=>this.update({message,progress}));this._volumes=[];this.update({selectedFiles:[],message:'已从配套服务完整导入牛津词库',progress:100});await this.refresh();}
+    catch(error){this.update({error:error.message,message:'导入未完成，学习记录保留，可重新开始'});}
+    finally{this.update({working:false});}
+  },
   async onRemove() { if (this.data.working || !await ui.confirm('移除离线牛津词库？', '只移除已导入的词库文件，生词本、笔记和历史会保留。')) return; try { await pack.remove(); this.update({ message: '离线词库已移除', progress: 0 }); await this.refresh(); } catch (error) { ui.error(error); } },
   onUnload() { this._unloaded = true;clearInterval(this._poll); }
 });

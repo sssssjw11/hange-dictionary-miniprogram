@@ -71,7 +71,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.13.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.14.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
