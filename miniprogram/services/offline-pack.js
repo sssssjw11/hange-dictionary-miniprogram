@@ -69,6 +69,7 @@ async function lookup(word, options = {}) {
   if (!ids.length) return null;
   const pages = []; for (const id of ids) pages.push(await document(pack, id));
   const rendered = codec.renderOxford(pages);
+  rendered.sourceSha256=pack.manifest.sourceSha256;
   return { kind: 'entry', requested: word, word: pages[0].word, matchedFrom:store.key(pages[0].word)!==key?word:'', source: 'offline-pack', oxford: rendered, related: rendered.related, phonetics: rendered.phonetics, brief:rendered.brief };
 }
 async function chineseGroups(pack, term) {

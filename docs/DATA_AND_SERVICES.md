@@ -8,6 +8,7 @@ server/data/                  # Git 和 Docker 均排除
   oxford/
     oxford.db                # 自己的 MDX 转换结果，查询时只读
     chinese.db               # 对应源指纹的中文反查索引
+    media.db                 # 可选的 MDD 媒体索引，关联同一 MDX 来源指纹
 server/models/               # 可选的 Vosk 模型，排除于版本控制
 server/runtime/              # 本地生成的语音文件，排除于版本控制
 server/.optional-python/     # 可选私有依赖目录，排除于版本控制
@@ -37,6 +38,25 @@ v2.4 直接兼容已安装的 v2.3 分卷，无需重新生成或导入。原词
 在词条页点“更多词典”后，应用向已配置的服务查询当前原词头的 ECDICT、WordNet 和原创说明；不会重新传输牛津正文，也不自动连接模型服务。读取成功后可切换“英语分义”“开源简释”等标签，牛津当前页及未保存笔记继续保留。
 
 已读补充内容与整条查询缓存共用 4 MB / 30 项预算，使用单独命名空间，不会覆盖同名单词缓存；清理缓存不删除学习记录。安装词库后可直接合并已有补充缓存，刷新并关闭应用网络服务后仍可查阅。服务失败时保留已有补充与正文；无补充库、未收录以及连接失败分别显示实际状态。`running` 等独立词条按自身词头匹配，不套用 `run` 的动词分义。
+
+## 原版录音与插图（MDD）
+
+词条原文中的录音、例句音频及插图引用保留在 `oxford.mediaRefs`，不执行源脚本。客户端从“录音与插图”进入独立原生页面，每页 12 项，可按类型及原文语境搜索。旧缓存缺少这些信息时，会尝试从新版服务重新读取；父词条页的笔记不随媒体页更新。已有牛津文字分卷无需重新导入。
+
+当前提供的原始目录只有 MDX、CSS、JS 和封面，没有 MDD。完整原版媒体必须由用户另行提供；页面会区分未导入、词库版本不匹配、具体资源缺失和连接失败。系统合成朗读仍保留在词条页，以“朗读”标识。
+
+MDD 通过可选的 [mdict-utils](https://github.com/liuyug/mdict-utils) 读取，在配套服务所在电脑执行：
+
+```powershell
+python -m pip install mdict-utils==1.3.14
+python scripts/import_mdd.py ".\自己的词库\oald10.mdd" ".\自己的词库\oald10.1.mdd"
+```
+
+只提供实际存在的分卷。默认关联 `server/data/oxford/oxford.db`，生成新的 `server/data/oxford/media.db`；已有数据库或 `.partial` 文件不会覆盖。也可通过 `--dictionary`、`--output`、`--reader-dir` 指定自己的输入或读取器。服务会在下次查询发现已完成的媒体导入，不必重装微信文字词库。
+
+导入支持 PNG/JPEG/GIF/WebP 和 MP3/WAV/M4A/AAC，每个资源最多 16 MiB，并检查文件头。脚本、样式、未知格式、非法路径和不符合格式的内容不导入，数量会计入 `unsupported`；跨分卷相同资源去重，不同内容的同名资源会使导入失败。资源键只作为数据库键，不按 MDD 路径释放到电脑目录。媒体必须与该数据库记录的 MDX 指纹匹配，错误版本不会播放。
+
+原版媒体按需从配套服务下载；客户端最多暂存 4 个文件、共 16 MiB，离开媒体页停止音频，关闭页面释放这些临时文件。它们不属于已安装的完整离线文字分卷，也不包含在学习备份中。手机使用配套服务时仍需可访问的服务地址；正式环境需自己的 HTTPS 配置。真实微信图片预览及音频播放仍需真机验收。
 
 ## 分组、批注与备份
 
@@ -100,6 +120,9 @@ Vosk 模型来自 [官方模型清单](https://alphacephei.com/vosk/models)；OC
 | `GET /api/lookup?q=` | 完整正文、分义、例句、音标、全部关联词；中文多结果含后续游标 |
 | `GET /api/wordlists` | 从已导入牛津读取等级、主题、OPAL 词汇分表及短语分类目录 |
 | `GET /api/wordlist?id=` | 读取目录中选定词表，保留词性、级别与相关词；客户端分页显示 |
+| `GET /api/dictionary-media/status` | 对应词库的 MDD 导入状态与媒体数量 |
+| `POST /api/dictionary-media/resolve` | 按词库来源指纹查询一页媒体是否可用，每次最多 24 项 |
+| `GET /api/dictionary-media/file?key=&sourceSha256=` | 读取已导入的图片或录音，支持字节范围；不接受任意电脑文件路径 |
 | `GET /api/supplement?q=` | 当前原词头的简释、词形、WordNet 和原创说明；不含牛津正文 |
 | `GET /api/reverse?q=&cursor=` | 中文反查每页 40 条；返回 `nextCursor`，为 `null` 表示结束 |
 | `GET /api/capabilities` | OCR / TTS / ASR / AI / 翻译 / 文档的真实可用性 |

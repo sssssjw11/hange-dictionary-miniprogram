@@ -19,6 +19,7 @@ from oxford_navigation import navigation, sense_prefix, empty_learning, merge_le
 from text_index import normalize, has_han, query_terms, meaning_rank
 from spelling import eligible as spelling_eligible, rank as spelling_rank
 import wordlists
+from dictionary_media import MediaStore,media_references
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,17 +57,21 @@ class Engine:
             except sqlite3.Error:
                 self.oxford_chinese = False
         self.teaching = json.loads((ROOT / 'miniprogram/data/learning.json').read_text('utf-8'))
-        self.counts = {'base': 0, 'oxford': 0}
+        self.counts = {'base': 0, 'oxford': 0};self.oxford_source_sha=''
         for name, file in [('base', self.base), ('oxford', self.oxford)]:
             if file.is_file():
                 with closing(connect(file)) as db:
                     self.counts[name] = db.execute('SELECT count(*) FROM entries' + (' WHERE body IS NOT NULL' if name == 'oxford' else '')).fetchone()[0]
+                    if name=='oxford':
+                        try:row=db.execute("SELECT value FROM metadata WHERE key='source_sha256'").fetchone();self.oxford_source_sha=row[0] if row else ''
+                        except sqlite3.Error:pass
+        self.media=MediaStore(self.folder/'oxford/media.db',self.oxford_source_sha)
 
     def status(self):
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.10.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.11.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -291,7 +296,7 @@ class Engine:
                 data['forms'].append({'label': labels[code], 'word': word})
         data['tags'] = (data.pop('tagsRaw', '') or '').split()
         blocks, related, examples, phonetics, brief = [], [], [], {}, ''
-        anchors=[];contents=[];references=[];local_links=[];word_list_links=[];learning=empty_learning()
+        anchors=[];contents=[];references=[];local_links=[];word_list_links=[];media_refs=[];learning=empty_learning()
         for document,(identifier, headword, html) in enumerate(pages):
             first_block=len(blocks)
             rendered, links, info = rich_blocks(html, with_info=True,word=headword)
@@ -309,6 +314,7 @@ class Engine:
                     target.append(item)
             references.extend(info['references']);local_links.extend(dict(item,document=document) for item in info['localLinks'])
             word_list_links.extend(info['wordListLinks'])
+            media_refs.extend(info['mediaRefs'])
         seen_references=set();unique_references=[]
         for item in references:
             key=(item['word'],item['anchor'])
@@ -316,7 +322,10 @@ class Engine:
         list_ids=set();unique_list_links=[]
         for item in word_list_links:
             if item['id'] not in list_ids:list_ids.add(item['id']);unique_list_links.append(item)
-        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'localLinks':local_links,'learningVersion':1,'learning':learning,'wordListVersion':1,'wordListLinks':unique_list_links}
+        media_keys=set();unique_media=[]
+        for item in media_refs:
+            if item['key'] not in media_keys:media_keys.add(item['key']);unique_media.append(item)
+        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'localLinks':local_links,'learningVersion':1,'learning':learning,'wordListVersion':1,'wordListLinks':unique_list_links,'mediaVersion':1,'mediaRefs':unique_media,'sourceSha256':self.oxford_source_sha}
         data['brief']=brief
         data['phonetics']=phonetics
         related.extend((data.get('teaching') or {}).get('related', []))
@@ -331,6 +340,7 @@ def rich_blocks(html, with_info=False,word=''):
     executed. Fragmentation splits the tree without truncating long entries.
     """
     soup = BeautifulSoup(html, 'html.parser')
+    media_refs=media_references(soup)
     for node in soup.select('script,style,link,meta,base,iframe,object,embed,img,audio,video,source,audio-wr,.audio_play_button'):
         node.decompose()
     related = []
@@ -448,5 +458,5 @@ def rich_blocks(html, with_info=False,word=''):
         examples=[]
         for node in soup.select('.x'):
             sibling=node.find_next_sibling();examples.append({'en':node.get_text(' ',strip=True),'zh':sibling.get_text(' ',strip=True) if sibling and sibling.name.lower()=='xt' else '', 'source':'牛津十版'})
-        return blocks,list(dict.fromkeys(related)),dict(navigation(soup,blocks,word),phonetics=phonetics,examples=examples,brief=oxford_summary(soup))
+        return blocks,list(dict.fromkeys(related)),dict(navigation(soup,blocks,word),phonetics=phonetics,examples=examples,brief=oxford_summary(soup),mediaRefs=media_refs)
     return blocks, list(dict.fromkeys(related))

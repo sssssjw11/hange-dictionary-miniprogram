@@ -15,6 +15,7 @@
     <view wx:elif="{{message}}" class="small muted">{{message}}</view>
     <view wx:if="{{error}}" class="error-text">{{error}}</view>
   </view>
-  <view class="footer">词库数据由你自行提供，不在公开仓库中分发。全量正文、英美音标和中文反查索引都包含于离线包。包内没有原版音频或插图；朗读可连接本地语音服务。</view>
+  <view class="card dictionary-card"><view class="section-head"><text class="section-title">原版录音与插图</text><button class="text-button" disabled="{{mediaChecking}}" bindtap="onCheckMedia">刷新状态</button></view><view class="info">{{mediaChecking ? '正在读取媒体状态…' : mediaStatus}}</view><view class="small muted">在配套服务导入对应的 MDD 文件后，可从词条“录音与插图”中按需查看或播放。媒体未提供时仍可完整阅读文字，普通朗读使用本机音色。</view></view>
+  <view class="footer">词库数据由你自行提供，不在公开仓库中分发。全量正文、英美音标和中文反查索引都包含于离线包。原版媒体单独通过配套服务读取，不随文字分卷导入。</view>
   <view class="footer">导入新版前需先移除旧包，为微信本地文件空间腾出位置。请选择同一次生成的全部分卷，避免混用。</view>
 </view>

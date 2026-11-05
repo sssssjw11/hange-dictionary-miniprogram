@@ -1,10 +1,12 @@
 const pack = require('../../services/offline-pack');
 const ui = require('../../utils/ui');
+const api=require('../../services/api');
 Page({
-  data: { theme: 'light', installed: false, broken: false, working: false, progress: 0, message: '', error: '', title: '', definitions: 0, redirects: 0, size: '', selectedFiles: [] },
+  data: { theme: 'light', installed: false, broken: false, working: false, progress: 0, message: '', error: '', title: '', definitions: 0, redirects: 0, size: '', selectedFiles: [],mediaChecking:false,mediaStatus:'',mediaReady:false },
   onLoad(){this._volumes=[];this._attempted=false;},
   update(value){if(!this._unloaded)this.setData(value);},
-  onShow() { this._unloaded=false;ui.apply(this);this.refresh();clearInterval(this._poll);this._poll=setInterval(()=>{if(pack.progress().working||this.data.working)this.refresh();},1000); },
+  onShow() { this._unloaded=false;ui.apply(this);this.refresh();this.onCheckMedia();clearInterval(this._poll);this._poll=setInterval(()=>{if(pack.progress().working||this.data.working)this.refresh();},1000); },
+  async onCheckMedia(){if(this.data.mediaChecking)return;this.update({mediaChecking:true});try{const state=await api.request('dictionary-media/status',{},'GET',1500);this.update({mediaReady:state.available,mediaStatus:state.available?'配套服务已导入 '+state.audio+' 个录音、'+state.images+' 张插图':state.reason});}catch(error){this.update({mediaReady:false,mediaStatus:error.message});}finally{this.update({mediaChecking:false});}},
   onHide(){clearInterval(this._poll);},
   async refresh() {
     const state=await pack.status(),activity=pack.progress();

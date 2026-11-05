@@ -1,0 +1,14 @@
+<view class="page {{theme}}">
+ <view class="page-heading"><text class="eyebrow">牛津十版 · 词条媒体</text><view class="title">{{word || '录音与插图'}}</view><view class="subtitle">查看词条原有的发音、例句录音和插图。</view></view>
+ <view wx:if="{{loading}}" class="loading">正在读取媒体引用…</view>
+ <view wx:elif="{{error}}" class="card error-card"><text>{{error}}</text><button class="primary" bindtap="onRetry">重新读取</button></view>
+ <view wx:else>
+  <view class="segmented"><button class="{{kind === 'all' ? 'chosen' : ''}}" data-kind="all" bindtap="onKind">全部</button><button class="{{kind === 'audio' ? 'chosen' : ''}}" data-kind="audio" bindtap="onKind">原版录音</button><button class="{{kind === 'image' ? 'chosen' : ''}}" data-kind="image" bindtap="onKind">词条插图</button></view>
+  <input class="field" value="{{query}}" bindinput="onSearch" placeholder="搜索例句、发音或插图名称"/>
+  <view wx:if="{{total}}" class="media-status"><text>{{checking ? '正在核对资源…' : status}}</text><button class="text-button" disabled="{{checking}}" bindtap="onCheck">刷新状态</button></view>
+  <view class="section-head"><text class="section-title">{{total}} 项来源引用</text><text class="small muted">每页 12 项</text></view>
+  <view class="card media-list"><view wx:for="{{rows}}" wx:key="key" class="media-row"><view class="media-copy"><text class="media-kind">{{item.kind === 'image' ? '插图' : item.variant === 'UK' ? '英式原版录音' : item.variant === 'US' ? '美式原版录音' : '原版录音'}}</text><text class="media-label" selectable="true">{{item.label}}</text><text class="small muted">{{checking ? '正在核对' : item.available ? '已导入' : '未提供对应资源'}}</text></view><button class="media-button {{item.available ? 'ready' : ''}}" disabled="{{checking || !item.available || busyKey}}" data-index="{{item.index}}" bindtap="onResource">{{busyKey === item.key ? '读取中' : item.kind === 'image' ? '查看' : playingKey === item.key ? '停止' : '播放'}}</button></view><view wx:if="{{!rows.length}}" class="empty">{{query ? '没有符合搜索的媒体引用。' : '此词条没有附带这类媒体引用。'}}</view></view>
+  <view wx:if="{{listPages > 1}}" class="actions pagination"><button disabled="{{listPage === 0}}" bindtap="onPrev">上一页</button><text>{{listPage+1}} / {{listPages}}</text><button disabled="{{listPage+1 >= listPages}}" bindtap="onNext">下一页</button></view>
+  <view class="footer">原版录音与插图需要对应的 MDD 文件，并通过配套服务读取。未提供的资源不会用合成音频替代；普通朗读仍可在词条页使用。图片与音频按需读取，离开页面后释放本页临时文件。</view>
+ </view>
+</view>

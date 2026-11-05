@@ -42,13 +42,18 @@ class Handler(BaseHTTPRequestHandler):
                 data = {'rows': self.engine.word_list_catalog()}
             elif route.path == '/api/wordlist':
                 data = self.engine.word_list(query.get('id',[''])[0])
+            elif route.path == '/api/dictionary-media/status':
+                data = self.engine.media.status()
+            elif route.path == '/api/dictionary-media/file':
+                mime,body=self.engine.media.read(query.get('key',[''])[0],query.get('sourceSha256',[''])[0])
+                return self.send_resource(mime,body)
             else:
                 return self.respond(404, {'error': '接口不存在'})
             self.respond(200, data)
         except ValueError as error:
             self.respond(400, {'error': str(error)})
         except FileNotFoundError as error:
-            self.respond(404 if route.path.startswith('/api/audio/') else 503, {'error': str(error)})
+            self.respond(404 if route.path.startswith(('/api/audio/','/api/dictionary-media/')) else 503, {'error': str(error)})
         except Exception:
             self.respond(500, {'error': '本地词库查询失败，请检查服务端控制台'})
             import traceback
@@ -61,12 +66,13 @@ class Handler(BaseHTTPRequestHandler):
             if not 0<length<=12*1024*1024:raise ValueError('请求内容为空或超过 12 MiB')
             body=self.rfile.read(length)
             if self.features is None:self.features=Features()
-            if route in ['/api/tts','/api/assistant']:
+            if route in ['/api/tts','/api/assistant','/api/dictionary-media/resolve']:
                 if length>256*1024:raise ValueError('文本请求过大')
                 try:payload=json.loads(body)
                 except (ValueError,UnicodeDecodeError) as error:raise ValueError('请求不是有效的 JSON') from error
                 if not isinstance(payload,dict):raise ValueError('请求格式无效')
                 if route=='/api/tts':data=self.features.synthesize(payload.get('text',''),payload.get('variant','US'),payload.get('language','en'),payload.get('rate',0))
+                elif route=='/api/dictionary-media/resolve':data=self.engine.media.resolve(payload.get('keys'),payload.get('sourceSha256'))
                 else:data=self.features.assistant(payload)
             elif route in ['/api/ocr','/api/asr','/api/document']:
                 fields,blob=self.upload(body)
@@ -123,6 +129,18 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.end_headers()
         self.wfile.write(body)
+
+    def send_resource(self,mime,body):
+        total=len(body);start=0;end=total-1;status=200;header=self.headers.get('Range')
+        if header:
+            match=re.fullmatch(r'bytes=(\d+)-(\d*)',header)
+            if not match:return self.respond(416,{'error':'媒体范围无效'})
+            start=int(match[1]);end=min(end,int(match[2])) if match[2] else end
+            if start>end or start>=total:return self.respond(416,{'error':'媒体范围超出文件'})
+            status=206
+        self.send_response(status);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(end-start+1));self.send_header('Accept-Ranges','bytes');self.send_header('Cache-Control','private, max-age=86400');self.send_header('X-Content-Type-Options','nosniff')
+        if status==206:self.send_header('Content-Range','bytes %d-%d/%d'%(start,end,total))
+        self.end_headers();self.wfile.write(body[start:end+1])
 
     def log_message(self, template, *args):
         # Query words and all learning records stay out of access logs.

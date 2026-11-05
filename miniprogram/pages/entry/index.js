@@ -128,6 +128,7 @@ Page({
   },
   onWordListLink(event){const row=((((this._entry||{}).oxford||{}).wordListLinks)||[])[Number(ui.dataset(event,'index'))];if(row)wx.navigateTo({url:'/pages/wordlist/index?oxford='+encodeURIComponent(row.id),fail:()=>ui.error(new Error('暂时无法打开词表，请返回一层后重试'))});},
   onAllWordLists(){wx.navigateTo({url:'/pages/wordlist/index?source=oxford'});},
+  onDictionaryMedia(){if(this._entry){media.stopAudio();wx.navigateTo({url:'/pages/dictionary-media/index?q='+encodeURIComponent(this._query||this._entry.word),fail:()=>ui.error(new Error('暂时无法打开媒体页，请返回一层后重试'))});}},
   onWordListsPrev(){this.wordListsPage(this.data.wordListPage-1);wx.pageScrollTo({selector:'#entry-wordlists',duration:180});},
   onWordListsNext(){this.wordListsPage(this.data.wordListPage+1);wx.pageScrollTo({selector:'#entry-wordlists',duration:180});},
   onPrev() { this.contentPage(this.data.page - 1); wx.pageScrollTo({ selector: '#content-start', duration: 180 }); },
