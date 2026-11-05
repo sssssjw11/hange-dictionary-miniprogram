@@ -86,7 +86,7 @@ test('reverse page navigation preserves the list on failure, ignores a stale res
     const entry=page('entry');await entry.load('测试');await entry.onMatchNext();assert.equal(entry.data.matchPage,1);assert.equal(entry.data.matches[0].word,'second');
     fail=true;await entry.onMatchNext();assert.equal(entry.data.matchPage,1);assert.equal(entry.data.matches[0].word,'second');assert.match(entry.data.matchError,/read failed/);
     fail=false;await entry.onMatchPrev();assert.equal(entry.data.matchPage,0);await entry.onMatchNext();
-    let destination;wx.navigateTo=o=>{destination=o.url;};entry.onWord({currentTarget:{dataset:{word:'second'}}});assert.equal(destination,'/pages/entry/index?q=second');assert.equal(entry.data.matchPage,1);
+    let destination;wx.navigateTo=o=>{destination=o.url;};entry.onWord({currentTarget:{dataset:{word:'second'}}});assert.match(destination,/^\/pages\/entry\/index\?q=second&matchRef=[a-z0-9]+$/);assert.equal(entry.data.matchPage,1);
     const pending=entry.onMatchNext();await entry.onMatchNext();assert.equal(calls,5);await entry.load('apple');release({kind:'matches',matches:[{word:'stale'}],nextCursor:null});await pending;
     assert.equal(entry.data.entry.word,'apple');assert.equal(entry.data.matches.length,0);assert.equal(entry.data.matchLoading,false);
   }finally{dictionary.lookup=lookup;dictionary.matchPage=matchPage;wx.navigateTo=navigate;}
