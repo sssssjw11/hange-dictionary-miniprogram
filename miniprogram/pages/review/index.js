@@ -1,6 +1,7 @@
 const media=require('../../services/media');const {Pronunciation,voiceLabel}=require('../../services/pronunciation');
 const study=require('../../services/study');const dictionary=require('../../services/dictionary');const offline=require('../../data/offline');const ui=require('../../utils/ui');const store=require('../../utils/store');
 const {SourceAudio}=require('../../services/wordlist-audio');
+const navigation=require('../../utils/wordlist-navigation');
 Page({
  data:{theme:'light',loading:true,error:'',word:'',meaning:'',revealed:false,mode:'flash',index:0,total:0,answer:'',checked:false,correct:false,choices:[],finished:false,done:0,voiceStatus:'',speakingVariant:'',sourceOnly:false,relatedWord:''},
  onLoad(options){this._closed=false;const deck=ui.decode(options.deck||'favorites');const saved=options.resume?study.pending():null;this._session=saved || {id:'session-'+Date.now(),deck,mode:options.mode||'flash',words:study.queue(deck).words,index:0,done:0};this._sourceAudio=new SourceAudio(study.sourceId(this._session.deck));this.setData({mode:this._session.mode,index:this._session.index,total:this._session.words.length,done:this._session.done||0});this.loadCard();},
@@ -34,5 +35,5 @@ Page({
  onNext(){this.rate(this._firstCorrect?'good':'again');},
  rate(grade){if(this.data.sourceOnly||this._rated||!this._entry)return;this._rated=true;try{study.review(this._session.words[this._session.index],grade,{event:this._session.id+'#'+this._session.index,seconds:(Date.now()-this._started)/1000});this._session.index++;this._session.done++;study.pending(this._session);this.loadCard();}catch(error){this._rated=false;ui.error(error);}},
  onSkip(){if(this.data.loading)return;this._session.index++;study.pending(this._session);this.loadCard();},
- onDetail(){if(this._entry)ui.open(this._entry.word);},onSourceRelated(){if(this.data.relatedWord)ui.open(this.data.relatedWord);},onExit(){wx.navigateBack();},onUnload(){this._closed=true;this.onHide();this._loadGeneration++;if(this._session && !this.data.finished)study.pending(this._session);}
+ onDetail(){if(this._entry)ui.open(this._entry.word);},onSourceRelated(){navigation.openRelated({word:this.data.word,relatedWord:this.data.relatedWord});},onExit(){wx.navigateBack();},onUnload(){this._closed=true;this.onHide();this._loadGeneration++;if(this._session && !this.data.finished)study.pending(this._session);}
 });

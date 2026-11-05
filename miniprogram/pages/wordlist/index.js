@@ -5,6 +5,7 @@ const ui=require('../../utils/ui');
 const list=require('../../utils/list');
 const media=require('../../services/media');
 const wordlistAudio=require('../../services/wordlist-audio');
+const navigation=require('../../utils/wordlist-navigation');
 const {Pronunciation,voiceLabel}=require('../../services/pronunciation');
 Page({
  data:{theme:'light',name:'',text:'',query:'',fileName:'',fileCharacters:0,creating:false,rows:[],total:0,listPage:0,listPages:1,id:'',custom:false,mastered:false,oxfordCatalog:false,oxfordList:false,loading:false,error:'',uniqueWords:0,sourceRecords:0,imported:false,speakingIndex:-1,voiceInfoIndex:-1,voiceInfo:''},
@@ -34,9 +35,9 @@ Page({
  onOxfordCatalog(event){wx.navigateTo({url:'/pages/wordlist/index?oxford='+encodeURIComponent(ui.dataset(event,'id'))});},
  onOxfordWord(event){
   const row=this._sourceList&&this._sourceList.rows[Number(ui.dataset(event,'index'))];if(!row)return;
-  wx.navigateTo({url:'/pages/entry/index?q='+encodeURIComponent(row.query||row.word)+'&ref=1&label='+encodeURIComponent(row.word)+(row.anchor?'&anchor='+encodeURIComponent(row.anchor):'')});
+  navigation.open(row);
  },
- onOxfordRelated(event){const row=this._sourceList&&this._sourceList.rows[Number(ui.dataset(event,'index'))];if(row&&row.relatedWord)wx.navigateTo({url:'/pages/entry/index?q='+encodeURIComponent(row.relatedWord)+'&ref=1&label='+encodeURIComponent(row.word)});},
+ onOxfordRelated(event){const row=this._sourceList&&this._sourceList.rows[Number(ui.dataset(event,'index'))];navigation.openRelated(row);},
  stopListVoice(){this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation)this._pronunciation.cancel();if(!this._closed)this.setData({speakingIndex:-1,voiceInfoIndex:-1,voiceInfo:''});},
  async onOxfordSpeak(event){
   const index=Number(ui.dataset(event,'index')),row=this._sourceList&&this._sourceList.rows[index];if(!row)return;
