@@ -38,6 +38,12 @@ test('contents rows and source focus blocks use native buttons and addressable o
   const result=compile('pages/entry/index.wxml')(data),all=nodes(result);assert.ok(text(result).includes('牛津目录'));assert.ok(text(result).includes('2. 原文义项'));assert.ok(all.some(node=>node.attr&&node.attr.id==='oxford-0-1-focus'));assert.ok(all.some(node=>node.attr&&node.attr.bindtap==='onReference'));assert.ok(all.some(node=>node.attr&&node.attr.bindtap==='onContentsItem'));
 });
 
+test('source page references and legacy refresh controls are rendered in the correct states',()=>{
+  const base={loading:false,theme:'light',entry:{word:'demo',hasOxford:true,forms:[],learningTags:[]},source:'oxford',oxfordBlocks:[{id:'0',nodes:[]}],totalPages:1,relatedTotal:1};
+  const current=compile('pages/entry/index.wxml')(Object.assign({},base,{pageReferenceAvailable:true,pageReferenceTotal:1,pageReferenceRows:[{index:0,label:'original link'}],pageReferencePages:1}));assert.ok(text(current).includes('本页关联词'));assert.ok(nodes(current).some(node=>node.attr&&node.attr.bindtap==='onPageReference'));assert.ok(!text(current).includes('读取本页关联'));
+  const legacy=compile('pages/entry/index.wxml')(Object.assign({},base,{pageReferenceAvailable:false,pageReferenceTotal:0,pageReferenceRows:[]}));assert.ok(text(legacy).includes('读取本页关联'));assert.ok(nodes(legacy).some(node=>node.attr&&node.attr.bindtap==='onPageReferenceRefresh'));
+});
+
 test('spelling suggestions keep the typed query and offer word buttons without Chinese pagination or an irrelevant retry',()=>{
   const data={loading:false,entry:null,resultKind:'missing',suggestionKind:'spelling',matchQuery:'semantci',matches:[{word:'semantic',meaning:'原创释义'}],error:'未找到这个拼写，选择下面的词条继续查词。',matchPage:0,matchNextCursor:null,partial:false};
   const result=compile('pages/entry/index.wxml')(data),all=nodes(result),copy=text(result);

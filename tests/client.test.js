@@ -97,8 +97,8 @@ test('100-item history and clear preserve the learning notebook', () => {
   store.clearHistory(); assert.deepEqual(store.history(), []); assert.equal(store.favorite('run').note, 'note');
 });
 
-test('native contents and cross-entry references focus the exact source offset while retaining same-headword drafts',async()=>{
-  const lookup=dictionary.lookup,codec=require('../miniprogram/vendor/codec');
+test('native contents and cross-entry references focus the exact source offset while retaining drafts',async()=>{
+  const lookup=dictionary.lookup,navigate=wx.navigateTo,codec=require('../miniprogram/vendor/codec');let destination;
   const html='<div class="entry" id="entry"><h1 class="headword">demo</h1><span class="pos">noun</span><a href="#duplicate">Idioms</a><span class="unbox" id="duplicate"><span class="box_title">Extra Examples</span>FIRST</span><span class="unbox" id="duplicate"><span class="box_title">Word Origin</span>SECOND</span><li class="sense" id="second" sensenum="2"><deft><chn>第二义项</chn></deft></li><a href="entry://alias#second">demo (2)</a><a href="entry://other#absent">other</a></div><div class="entry"><span class="headword">demo</span><span class="pos">verb</span><a href="#verb-jump">Idioms</a><span id="verb-jump">VERB</span></div>';
   dictionary.lookup=async word=>({kind:'entry',word:word==='other'?'other':'demo',matchedFrom:word==='alias'?'alias':'',source:'offline-pack',oxford:codec.renderOxford([{word,html}]),related:[]});
   const text=nodes=>nodes.map(node=>node.type==='text'?node.text:text(node.children||[])).join('');
@@ -111,9 +111,10 @@ test('native contents and cross-entry references focus the exact source offset w
     assert.equal(entry.data.contentsOpen,false);assert.equal(entry.data.focusLabel,'Word Origin');assert.ok(text(entry._focus.blocks[entry._focus.index].nodes).startsWith('Word OriginSECOND'));
     assert.equal(entry._focus.blocks.map(block=>text(block.nodes)).join(''),original);assert.equal(entry.data.noteStatus,'尚未保存');
     entry.onClearFocus();assert.equal(entry._focus,null);assert.equal(entry.data.focusLabel,'');
-    await entry.onReference({currentTarget:{dataset:{index:0}}});assert.equal(entry.data.entry.word,'demo');assert.equal(entry.data.entry.matchedFrom,'');assert.equal(entry.data.note,'Retain this unsaved draft');assert.ok(text(entry._focus.blocks[entry._focus.index].nodes).startsWith('2. 第二义项'));assert.match(entry.onShareAppMessage().path,/anchor=second/);
-    await entry.onReference({currentTarget:{dataset:{index:1}}});assert.equal(entry.data.entry.word,'other');assert.ok(entry.data.focusError);assert.equal(entry.data.error,'');
-  }finally{dictionary.lookup=lookup;}
+    wx.navigateTo=value=>{destination=value.url;};entry.onReference({currentTarget:{dataset:{index:0}}});assert.equal(entry.data.note,'Retain this unsaved draft');assert.equal(entry.data.noteStatus,'尚未保存');
+    const alias=page('entry'),aliasOptions=Object.fromEntries(new URL(destination,'https://local.invalid').searchParams);alias.onLoad(aliasOptions);await new Promise(resolve=>setImmediate(resolve));assert.equal(alias.data.entry.word,'demo');assert.equal(alias.data.entry.matchedFrom,'');assert.ok(text(alias._focus.blocks[alias._focus.index].nodes).startsWith('2. 第二义项'));assert.match(alias.onShareAppMessage().path,/anchor=second/);
+    entry.onReference({currentTarget:{dataset:{index:1}}});const other=page('entry'),otherOptions=Object.fromEntries(new URL(destination,'https://local.invalid').searchParams);other.onLoad(otherOptions);await new Promise(resolve=>setImmediate(resolve));assert.equal(other.data.entry.word,'other');assert.ok(other.data.focusError);assert.equal(other.data.error,'');assert.equal(entry.data.note,'Retain this unsaved draft');
+  }finally{dictionary.lookup=lookup;wx.navigateTo=navigate;}
 });
 
 test('old full-entry caches can acquire contents without erasing a draft typed while refresh is pending',async()=>{

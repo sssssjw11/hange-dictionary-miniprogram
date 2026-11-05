@@ -62,7 +62,7 @@ def heading(node,word):
     if 'phrasal_verb_links' in c:return '短语动词',source_text(by_class('heading') or find(node,lambda item:item.name=='h2')) or 'Phrasal Verbs'
     return None
 def navigation(soup,blocks,word=''):
-    anchors=[];contents=[];references=[];local=[];word_lists=[];position=0;learning=empty_learning()
+    anchors=[];contents=[];references=[];reference_occurrences=[];local=[];word_lists=[];position=0;learning=empty_learning()
     def visit(node,root=False):
         nonlocal position
         if hidden(node):return
@@ -78,7 +78,9 @@ def navigation(soup,blocks,word=''):
             if href.startswith('#') and len(href)>1:local.append({'anchor':decode(href[1:]),'document':0,'label':excerpt(source_text(node))})
             elif re.match(r'^(entry|dic|bword)://',href,re.I):
                 target=href.split('://',1)[1];target_word,separator,anchor=target.partition('#');target_word=decode(target_word);anchor=decode(anchor) if separator else ''
-                if target_word and units(target_word)<=256 and not target_word.startswith('@'):references.append({'word':target_word,'anchor':anchor,'label':excerpt(source_text(node)) or target_word})
+                if target_word and units(target_word)<=256 and not target_word.startswith('@'):
+                    label=excerpt(source_text(node));references.append({'word':target_word,'anchor':anchor,'label':label or target_word})
+                    if label:reference_occurrences.append({'word':target_word,'anchor':anchor,'label':label,'document':0,'position':position})
                 else:
                     word_list=word_list_reference(target_word)
                     if word_list:word_lists.append(word_list)
@@ -92,7 +94,7 @@ def navigation(soup,blocks,word=''):
     def node_units(node):return units(node.get('text','')) if node.get('type')=='text' else sum(node_units(child) for child in node.get('children',[]))
     ends=[];total=0
     for block in blocks:total+=sum(node_units(node) for node in block);ends.append(total)
-    for marker in anchors+contents:
-        index=min(bisect_right(ends,marker['position']),len(ends)-1)
-        marker.update(blockIndex=index,offset=marker['position']-(ends[index-1] if index>0 else 0))
-    return {'anchors':anchors,'contents':contents,'references':references,'localLinks':local,'learning':learning,'wordListLinks':word_lists}
+    for marker in anchors+contents+reference_occurrences:
+        index=min(bisect_right(ends,marker['position']),len(ends)-1) if ends else -1
+        marker.update(blockIndex=index,offset=marker['position']-(ends[index-1] if index>0 else 0) if index>=0 else 0)
+    return {'anchors':anchors,'contents':contents,'references':references,'referenceOccurrences':reference_occurrences,'localLinks':local,'learning':learning,'wordListLinks':word_lists}

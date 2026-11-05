@@ -19,7 +19,7 @@ function heading(node,word){
   return null;
 }
 export function navigation(root,blocks,document,word){
-  const anchors=[],contents=[],references=[],localLinks=[],wordListLinks=[],learning=emptyLearning();let position=0;
+  const anchors=[],contents=[],references=[],referenceOccurrences=[],localLinks=[],wordListLinks=[],learning=emptyLearning();let position=0;
   function visit(node){
     if(hidden(node))return;
     if(node.type==='text'){position+=node.data.length;return;}
@@ -32,7 +32,7 @@ export function navigation(root,blocks,document,word){
       if(href.startsWith('#')&&href.length>1)localLinks.push({anchor:decodeURIComponent(href.slice(1)),document,label:excerpt(sourceText(node))});
       else if(/^(entry|dic|bword):\/\//i.test(href)){
         const target=href.split('://')[1],hash=target.indexOf('#'),word=decodeURIComponent(hash<0?target:target.slice(0,hash)),anchor=hash<0?'':decodeURIComponent(target.slice(hash+1));
-        if(word&&word.length<=256&&!word.startsWith('@'))references.push({word,anchor,label:excerpt(sourceText(node))||word});
+        if(word&&word.length<=256&&!word.startsWith('@')){const label=excerpt(sourceText(node));references.push({word,anchor,label:label||word});if(label)referenceOccurrences.push({word,anchor,label,document,position});}
         else{const list=wordListReference(word);if(list)wordListLinks.push(list);}
       }
     }catch(_){}
@@ -48,7 +48,7 @@ export function navigation(root,blocks,document,word){
     while(left<right){const middle=(left+right)>>>1;if(ends[middle]>marker.position)right=middle;else left=middle+1;}
     return Object.assign({},marker,{blockIndex:left,offset:marker.position-(left?ends[left-1]:0)});
   }
-  return{anchors:anchors.map(locate),contents:contents.map(locate),references,localLinks,learning,wordListLinks};
+  return{anchors:anchors.map(locate),contents:contents.map(locate),references,referenceOccurrences:referenceOccurrences.map(locate),localLinks,learning,wordListLinks};
 }
 export function nodeLength(node){return node.type==='text'?node.text.length:(node.children||[]).reduce((sum,child)=>sum+nodeLength(child),0);}
 function splitNodes(nodes,offset){

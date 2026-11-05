@@ -71,7 +71,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.20.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.21.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -296,7 +296,7 @@ class Engine:
                 data['forms'].append({'label': labels[code], 'word': word})
         data['tags'] = (data.pop('tagsRaw', '') or '').split()
         blocks, related, examples, phonetics, brief = [], [], [], {}, ''
-        anchors=[];contents=[];references=[];local_links=[];word_list_links=[];media_refs=[];learning=empty_learning()
+        anchors=[];contents=[];references=[];reference_occurrences=[];local_links=[];word_list_links=[];media_refs=[];learning=empty_learning()
         for document,(identifier, headword, html) in enumerate(pages):
             first_block=len(blocks)
             rendered, links, info = rich_blocks(html, with_info=True,word=headword)
@@ -306,7 +306,7 @@ class Engine:
             related.extend(links)
             examples.extend(info['examples']);phonetics.update(info['phonetics'])
             if not brief:brief=info['brief']
-            for name,target in [('anchors',anchors),('contents',contents)]:
+            for name,target in [('anchors',anchors),('contents',contents),('referenceOccurrences',reference_occurrences)]:
                 for ordinal,item in enumerate(info[name]):
                     item=dict(item,document=document)
                     if item['blockIndex']>=0:item['blockIndex']+=first_block
@@ -325,7 +325,7 @@ class Engine:
         media_keys=set();unique_media=[]
         for item in media_refs:
             if item['key'] not in media_keys:media_keys.add(item['key']);unique_media.append(item)
-        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'localLinks':local_links,'learningVersion':1,'learning':learning,'wordListVersion':1,'wordListLinks':unique_list_links,'mediaVersion':2,'mediaRefs':unique_media,'sourceSha256':self.oxford_source_sha}
+        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'referenceVersion':1,'referenceOccurrences':reference_occurrences,'localLinks':local_links,'learningVersion':1,'learning':learning,'wordListVersion':1,'wordListLinks':unique_list_links,'mediaVersion':2,'mediaRefs':unique_media,'sourceSha256':self.oxford_source_sha}
         data['brief']=brief
         data['phonetics']=phonetics
         related.extend((data.get('teaching') or {}).get('related', []))
