@@ -31,6 +31,7 @@ function parseWords(source){
 }
 function deleteDeck(id) { const data = state(); data.decks = data.decks.filter(deck => deck.id !== id); if (data.pending && data.pending.deck === id) data.pending = null; save(data); }
 function sourceDeck(sourceId){return state().decks.find(deck=>deck.sourceKey==='oxford:'+sourceId)||null;}
+function sourceId(deckId){const deck=state().decks.find(item=>item.id===deckId),key=deck&&deck.sourceKey;return typeof key==='string'&&key.startsWith('oxford:')?key.slice(7):'';}
 function importSourceDeck(sourceId,name,rawWords){
   if(typeof sourceId!=='string'||!sourceId||sourceId.length>256||/[\x00-\x1f]/.test(sourceId))throw new Error('词表来源无效');
   const data=state(),existing=data.decks.find(deck=>deck.sourceKey==='oxford:'+sourceId);if(existing)return existing.id;
@@ -74,4 +75,4 @@ function pending(value) { const data = state(); if (value !== undefined) { data.
 function playback(value){const data=state();if(value!==undefined){data.playback=value;save(data);}return data.playback||null;}
 function stats(now = Date.now()) { const data = state(), cards = Object.values(data.cards), today = data.days[dayKey(now)] || {new:0,review:0,attempts:0,correct:0,seconds:0}; const days = []; for (let i = 6; i >= 0; i--) { const key = dayKey(now-i*DAY), value=data.days[key] || {new:0,review:0}; days.push({date:key.slice(5),count:value.new+value.review}); } let streak=0; for (let i=0;i<400;i++) { const day=data.days[dayKey(now-i*DAY)]; if (day && day.attempts) streak++; else if (i!==0) break; } return {today,days,streak,learned:cards.length,mastered:cards.filter(card=>card.known || card.interval>=21).length,due:cards.filter(card=>!card.known && card.due<=now).length,plan:data.plan,pending:data.pending}; }
 function checkSpelling(answer, target) { return store.key(answer) === store.key(target); }
-module.exports = { decks, words, createDeck, sourceDeck, importSourceDeck, deleteDeck, queue, review, known, mastered, plan, pending, playback, stats, checkSpelling, dayKey };
+module.exports = { decks, words, createDeck, sourceDeck, sourceId, importSourceDeck, deleteDeck, queue, review, known, mastered, plan, pending, playback, stats, checkSpelling, dayKey };

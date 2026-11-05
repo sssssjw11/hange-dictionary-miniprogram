@@ -1,1 +1,29 @@
-<view class="page {{theme}}"><view wx:if="{{finished}}" class="complete card"><view class="title">本次已完成</view><view class="metric">{{done}} 张词卡</view><view class="subtitle">复习时间已按本次表现更新。</view><button class="primary" bindtap="onExit">返回学习</button></view><view wx:else><view class="row"><text class="eyebrow">{{index+1}} / {{total}}</text><button class="text-button" bindtap="onSkip">跳过</button></view><view wx:if="{{loading}}" class="loading">准备词卡…</view><view wx:elif="{{error}}" class="info">{{error}}</view><view wx:else class="card review-card"><view wx:if="{{mode === 'spell'}}"><text class="subtitle">根据释义拼写</text><view class="question-meaning">{{meaning}}</view><input class="field answer" value="{{answer}}" bindinput="onAnswer" bindconfirm="onCheck" placeholder="输入英文单词或短语" disabled="{{checked}}"/><button wx:if="{{!checked}}" class="primary" bindtap="onCheck">检查拼写</button><view wx:if="{{checked}}" class="info">{{correct ? '拼写正确' : '本次未拼对，请留意正确写法'}}</view><view wx:if="{{revealed}}" class="review-word">{{word}}</view></view><view wx:else><view class="review-word">{{word}}</view><view class="subtitle">{{phonetic}}</view><view wx:if="{{mode === 'choice'}}" class="choices"><button wx:for="{{choices}}" wx:key="index" class="{{item.status}}" disabled="{{checked}}" data-index="{{item.index}}" bindtap="onChoice">{{item.text}}</button><view wx:if="{{checked}}" class="info">{{correct ? '回答正确' : '已标出正确释义，下次再巩固'}}</view></view><view wx:else><view wx:if="{{revealed}}" class="question-meaning">{{meaning}}</view><button wx:else class="primary reveal" bindtap="onReveal">回忆后查看释义</button></view></view><view class="review-voice chips"><button data-variant="UK" bindtap="onSpeak">{{speakingVariant === 'UK' ? '停止英音' : '英式发音'}}</button><button data-variant="US" bindtap="onSpeak">{{speakingVariant === 'US' ? '停止美音' : '美式发音'}}</button></view><view wx:if="{{voiceStatus}}" class="small muted">{{voiceStatus}}</view><view wx:if="{{revealed && example}}" class="example"><text>{{example[0]}}</text><text class="meaning">{{example[1]}}</text></view><button wx:if="{{revealed}}" class="text-button detail" bindtap="onDetail">查看完整词条</button></view><view wx:if="{{revealed && mode === 'flash'}}" class="grade-buttons"><button data-grade="again" bindtap="onGrade">忘记<text>10 分钟后</text></button><button data-grade="hard" bindtap="onGrade">困难</button><button data-grade="good" bindtap="onGrade">记住</button><button data-grade="easy" bindtap="onGrade">熟练</button></view><button wx:if="{{checked && mode !== 'flash'}}" class="primary" bindtap="onNext">提交并继续</button></view></view>
+<view class="page {{theme}}">
+  <view wx:if="{{finished}}" class="complete card">
+    <view class="title">本次已完成</view><view class="metric">{{done}} 张词卡</view>
+    <view class="subtitle">复习时间已按本次表现更新。</view><button class="primary" bindtap="onExit">返回学习</button>
+  </view>
+  <view wx:else>
+    <view class="row"><text class="eyebrow">{{index+1}} / {{total}}</text><button class="text-button" bindtap="onSkip">跳过</button></view>
+    <view wx:if="{{loading}}" class="loading">准备词卡…</view><view wx:elif="{{error}}" class="info">{{error}}</view>
+    <view wx:else class="card review-card">
+      <view wx:if="{{sourceOnly}}"><view class="review-word">{{word}}</view><view class="info">当前未读取到独立释义，可朗读、查看关联词或跳过此卡。</view><button wx:if="{{relatedWord}}" class="text-button detail" bindtap="onSourceRelated">查看关联词 {{relatedWord}}</button></view>
+      <block wx:elif="{{mode === 'spell'}}">
+        <text class="subtitle">根据释义拼写</text><view class="question-meaning">{{meaning}}</view>
+        <input class="field answer" value="{{answer}}" bindinput="onAnswer" bindconfirm="onCheck" placeholder="输入英文单词或短语" disabled="{{checked}}"/>
+        <button wx:if="{{!checked}}" class="primary" bindtap="onCheck">检查拼写</button><view wx:if="{{checked}}" class="info">{{correct ? '拼写正确' : '本次未拼对，请留意正确写法'}}</view><view wx:if="{{revealed}}" class="review-word">{{word}}</view>
+      </block>
+      <block wx:else>
+        <view class="review-word">{{word}}</view><view class="subtitle">{{phonetic}}</view>
+        <view wx:if="{{mode === 'choice'}}" class="choices"><button wx:for="{{choices}}" wx:key="index" class="{{item.status}}" disabled="{{checked}}" data-index="{{item.index}}" bindtap="onChoice">{{item.text}}</button><view wx:if="{{checked}}" class="info">{{correct ? '回答正确' : '已标出正确释义，下次再巩固'}}</view></view>
+        <view wx:else><view wx:if="{{revealed}}" class="question-meaning">{{meaning}}</view><button wx:else class="primary reveal" bindtap="onReveal">回忆后查看释义</button></view>
+      </block>
+      <view class="review-voice chips"><button data-variant="UK" bindtap="onSpeak">{{speakingVariant === 'UK' ? '停止英音' : '英式发音'}}</button><button data-variant="US" bindtap="onSpeak">{{speakingVariant === 'US' ? '停止美音' : '美式发音'}}</button></view>
+      <view wx:if="{{voiceStatus}}" class="small muted">{{voiceStatus}}</view>
+      <view wx:if="{{!sourceOnly && revealed && example}}" class="example"><text>{{example[0]}}</text><text class="meaning">{{example[1]}}</text></view>
+      <button wx:if="{{!sourceOnly && revealed}}" class="text-button detail" bindtap="onDetail">查看完整词条</button>
+    </view>
+    <view wx:if="{{!sourceOnly && revealed && mode === 'flash'}}" class="grade-buttons"><button data-grade="again" bindtap="onGrade">忘记<text>10 分钟后</text></button><button data-grade="hard" bindtap="onGrade">困难</button><button data-grade="good" bindtap="onGrade">记住</button><button data-grade="easy" bindtap="onGrade">熟练</button></view>
+    <button wx:if="{{!sourceOnly && checked && mode !== 'flash'}}" class="primary" bindtap="onNext">提交并继续</button>
+  </view>
+</view>

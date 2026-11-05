@@ -3,13 +3,17 @@ const dictionary=require('../../services/dictionary');
 const store=require('../../utils/store');
 const ui=require('../../utils/ui');
 const list=require('../../utils/list');
+const media=require('../../services/media');
+const wordlistAudio=require('../../services/wordlist-audio');
+const {Pronunciation,voiceLabel}=require('../../services/pronunciation');
 Page({
- data:{theme:'light',name:'',text:'',query:'',fileName:'',fileCharacters:0,creating:false,rows:[],total:0,listPage:0,listPages:1,id:'',custom:false,mastered:false,oxfordCatalog:false,oxfordList:false,loading:false,error:'',uniqueWords:0,sourceRecords:0,imported:false},
- onLoad(options){this._closed=false;if(options.source==='oxford'){this._oxfordMode='catalog';this.setData({oxfordCatalog:true,name:'牛津词库词表'});return;}if(options.oxford){this._oxfordMode='list';this._oxfordId=ui.decode(options.oxford);this.setData({oxfordList:true,name:'正在读取词表…'});return;}if(options.name)this.setData({name:ui.decode(options.name),creating:true});else{const id=ui.decode(options.id||'favorites'),deck=study.decks().find(item=>item.id===id);this.setData({id,name:id==='mastered'?'熟词管理':deck?deck.name:'词表',custom:!!deck&&!deck.system,mastered:id==='mastered'});}},
- onShow(){ui.apply(this);if(!this.data.creating)this.refresh(this.data.listPage);},
+ data:{theme:'light',name:'',text:'',query:'',fileName:'',fileCharacters:0,creating:false,rows:[],total:0,listPage:0,listPages:1,id:'',custom:false,mastered:false,oxfordCatalog:false,oxfordList:false,loading:false,error:'',uniqueWords:0,sourceRecords:0,imported:false,speakingIndex:-1,voiceInfoIndex:-1,voiceInfo:''},
+ onLoad(options){this._closed=false;this._visible=true;if(options.source==='oxford'){this._oxfordMode='catalog';this.setData({oxfordCatalog:true,name:'牛津词库词表'});return;}if(options.oxford){this._oxfordMode='list';this._oxfordId=ui.decode(options.oxford);this.setData({oxfordList:true,name:'正在读取词表…'});return;}if(options.name)this.setData({name:ui.decode(options.name),creating:true});else{const id=ui.decode(options.id||'favorites'),deck=study.decks().find(item=>item.id===id);this.setData({id,name:id==='mastered'?'熟词管理':deck?deck.name:'词表',custom:!!deck&&!deck.system,mastered:id==='mastered'});}},
+ onShow(){this._visible=true;ui.apply(this);if(!this.data.creating)this.refresh(this.data.listPage);},
  words(){if(this._sourceList){const unique=new Map();for(const row of this._sourceList.rows)if(!unique.has(store.key(row.word)))unique.set(store.key(row.word),row.word);return Array.from(unique.values());}return this.data.mastered?study.mastered():study.words(this.data.id);},
  refresh(index=0){if(this._oxfordMode)return this.refreshOxford(index);try{const query=this.data.query.toLowerCase(),rows=this.words().filter(word=>word.toLowerCase().includes(query));this.setData(list.page(rows,index,50));}catch(error){ui.error(error);}},
  async refreshOxford(index=0){
+  if(this._pronunciation)this.stopListVoice();
   const generation=this._generation=(this._generation||0)+1;this.setData({loading:true,error:''});
   try{
    if(this._oxfordMode==='catalog'){
@@ -33,6 +37,19 @@ Page({
   wx.navigateTo({url:'/pages/entry/index?q='+encodeURIComponent(row.query||row.word)+'&ref=1&label='+encodeURIComponent(row.word)+(row.anchor?'&anchor='+encodeURIComponent(row.anchor):'')});
  },
  onOxfordRelated(event){const row=this._sourceList&&this._sourceList.rows[Number(ui.dataset(event,'index'))];if(row&&row.relatedWord)wx.navigateTo({url:'/pages/entry/index?q='+encodeURIComponent(row.relatedWord)+'&ref=1&label='+encodeURIComponent(row.word)});},
+ stopListVoice(){this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation)this._pronunciation.cancel();if(!this._closed)this.setData({speakingIndex:-1,voiceInfoIndex:-1,voiceInfo:''});},
+ async onOxfordSpeak(event){
+  const index=Number(ui.dataset(event,'index')),row=this._sourceList&&this._sourceList.rows[index];if(!row)return;
+  if(this.data.speakingIndex===index){this.stopListVoice();return;}
+  const generation=this._voiceGeneration=(this._voiceGeneration||0)+1;if(!this._pronunciation)this._pronunciation=new Pronunciation();else this._pronunciation.cancel();this.setData({speakingIndex:index,voiceInfoIndex:index,voiceInfo:'正在准备朗读…'});
+  const active=()=>!this._closed&&this._visible&&generation===this._voiceGeneration,source=this._sourceList.sourceSha256||'',settings=store.settings();let entry={word:row.word};
+  try{
+   if(settings.voiceMode!=='tts'&&!wordlistAudio.references(row,source).some(item=>item.variant===settings.voiceVariant))try{const found=await dictionary.lookup(row.query||row.word);if(!active())return;if(found.kind==='entry')entry=Object.assign({},found,{dictionaryWord:found.word,word:row.word});}catch(_){if(!active())return;}
+   entry=wordlistAudio.withSource(entry,row,source);if(!active())return;
+   await this._pronunciation.play(entry,{text:row.word,onStart:info=>{if(active())this.setData({voiceInfo:voiceLabel(info)});}});
+  }catch(error){if(active()){this.setData({voiceInfo:error.message});ui.error(error);}}
+  finally{if(active())this.setData({speakingIndex:-1});}
+ },
  onOxfordImport(){try{if(!this._sourceList)return;this._sourceDeckId=study.importSourceDeck(this._oxfordId,this._sourceList.name,this.words());this.setData({imported:true});wx.showToast({title:'已加入学习词表'});}catch(error){ui.error(error);}},
  onOxfordLearn(){if(this._sourceDeckId)wx.navigateTo({url:'/pages/review/index?deck='+encodeURIComponent(this._sourceDeckId)+'&mode=flash'});},
  onOxfordPlay(){if(this._sourceDeckId)wx.navigateTo({url:'/pages/player/index?deck='+encodeURIComponent(this._sourceDeckId)});},
@@ -43,6 +60,7 @@ Page({
  onExport(){try{const words=this.words(),name='涵词典-词表-'+Date.now()+'.txt',file=wx.env.USER_DATA_PATH+'/'+name;wx.getFileSystemManager().writeFile({filePath:file,data:words.join('\n'),encoding:'utf8',success(){if(wx.shareFileMessage)wx.shareFileMessage({filePath:file,fileName:name});else wx.setClipboardData({data:words.join('\n')});},fail:()=>ui.error(new Error('词表导出失败'))});}catch(error){ui.error(error);}},
  onSave(){try{study.createDeck(this.data.name,this._fileText===null||this._fileText===undefined?this.data.text:this._fileText);wx.navigateBack();}catch(error){ui.error(error);}},
  onImport(){wx.chooseMessageFile({count:1,type:'file',extension:['txt','csv','tsv'],success:result=>{const file=result.tempFiles[0];if(file.size>2*1048576)return ui.error(new Error('词表文件最多 2 MiB'));wx.getFileSystemManager().readFile({filePath:file.path,encoding:'utf8',success:result=>{this._fileText=result.data;this.setData({text:'',fileName:file.name,fileCharacters:result.data.length});},fail:()=>ui.error(new Error('请使用 UTF-8 编码的文本词表'))});}});},
- onUnload(){this._closed=true;this._generation=(this._generation||0)+1;},
+ onHide(){this._visible=false;this._voiceGeneration=(this._voiceGeneration||0)+1;if(this._pronunciation){this._pronunciation.release();this._pronunciation=null;}else media.stopAudio();if(!this._closed)this.setData({speakingIndex:-1,voiceInfoIndex:-1,voiceInfo:''});},
+ onUnload(){this._closed=true;this._generation=(this._generation||0)+1;this.onHide();},
  async onDelete(){if(await ui.confirm('删除自定义词表？','词表会移除，已学单词的复习进度和生词本会保留。')){try{study.deleteDeck(this.data.id);wx.navigateBack();}catch(error){ui.error(error);}}}
 });

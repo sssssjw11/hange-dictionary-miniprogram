@@ -1,9 +1,16 @@
 import {parseDocument} from 'htmlparser2';
+import {resourceKey} from './resources';
 const ignored=new Set(['script','style','audio','video','img','iframe']);
 function text(node){if(ignored.has(node.name))return '';return node.type==='text'?node.data:(node.children||[]).map(text).join('');}
 function find(node,test){if(ignored.has(node.name))return null;if(test(node))return node;for(const child of node.children||[]){const hit=find(child,test);if(hit)return hit;}return null;}
 const hasClass=(node,name)=>((node.attribs||{}).class||'').split(/\s+/).includes(name);
 const human=value=>value.replace(/[_-]+/g,' ').replace(/^./,char=>char.toUpperCase());
+function audioLinks(node){
+ const result={};function visit(item){if(ignored.has(item.name))return;if(item.name==='a'){
+  const href=(item.attribs||{}).href||'',variant=hasClass(item,'pron-uk')?'UK':hasClass(item,'pron-us')?'US':'',key=/^sound:\/\//i.test(href)?resourceKey(href):null;
+  if(variant&&key&&/\.(mp3|wav|m4a|aac)$/.test(key)){if(!result[variant])result[variant]=[];if(!result[variant].includes(key))result[variant].push(key);}
+ }for(const child of item.children||[])visit(child);}visit(node);return result;
+}
 export function wordListReference(word){
   if(typeof word!=='string'||word.length>256||/[\x00-\x1f]/.test(word))return null;
   const core=/^@ox(3000|5000)(?:&level=([abc][12]))?$/.exec(word);
@@ -26,7 +33,8 @@ export function parseWordList(html){
       const academic=find(node,item=>/^\/definition\/academic\//.test((item.attribs||{}).href||''));let relatedWord='';
       if(academic)try{relatedWord=decodeURIComponent(academic.attribs.href.split('/').pop().split('#')[0]);}catch(_){}
       const fields={};for(const [key,value] of Object.entries(at))if(key.startsWith('data-'))fields[key]=value;
-      result.push({word,pos:pos?text(pos).trim():'',level:level&&/^[ABC][12]$/.test(text(level).trim().toUpperCase())?text(level).trim().toUpperCase():'',query,anchor,relatedWord:relatedWord.toLowerCase()===word.toLowerCase()?'':relatedWord,fields});
+      const audio=audioLinks(node);
+      const row={word,pos:pos?text(pos).trim():'',level:level&&/^[ABC][12]$/.test(text(level).trim().toUpperCase())?text(level).trim().toUpperCase():'',query,anchor,relatedWord:relatedWord.toLowerCase()===word.toLowerCase()?'':relatedWord,fields};if(Object.keys(audio).length)row.audio=audio;result.push(row);
       return;
     }
     for(const child of node.children||[])visit(child);
@@ -66,7 +74,7 @@ export function selectWordList(rows,descriptor){
     const level=descriptor.kind==='oxford'?value.toUpperCase():row.level;
     const category=descriptor.kind==='opal'?(value||phraseValue):'';
     const note=category?(/^sublist_\d+$/.test(category)?'词汇分表 '+category.split('_').pop():human(category)):'';
-    result.push({word:row.word,pos:row.pos,level,query:row.query,anchor:row.anchor,relatedWord:row.relatedWord,note});
+    const selected={word:row.word,pos:row.pos,level,query:row.query,anchor:row.anchor,relatedWord:row.relatedWord,note};if(row.audio)selected.audio=row.audio;result.push(selected);
   }
   return {id:descriptor.id,name:descriptor.name,group:descriptor.group,rows:result,sourceRecords:result.length,uniqueWords:new Set(result.map(row=>row.word.normalize('NFC').replace(/_/g,' ').replace(/’/g,"'").trim().replace(/\s+/g,' ').toLowerCase())).size};
 }

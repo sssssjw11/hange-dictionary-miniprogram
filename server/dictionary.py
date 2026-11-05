@@ -71,7 +71,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.18.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.19.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -188,7 +188,7 @@ class Engine:
         if not isinstance(identifier,str) or len(identifier)>256:raise ValueError('词表编号无效')
         descriptor=next((item for item in self.word_list_catalog() if item['id']==identifier),None)
         if descriptor is None:raise ValueError('词表不存在，请返回目录重新选择')
-        return dict(wordlists.select(self._word_list_rows(descriptor['sourceKey']),descriptor),source='service')
+        return dict(wordlists.select(self._word_list_rows(descriptor['sourceKey']),descriptor),source='service',sourceSha256=self.oxford_source_sha)
 
     def _chinese_rows(self, term):
         seen = set()

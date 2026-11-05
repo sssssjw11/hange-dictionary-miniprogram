@@ -3,6 +3,7 @@ import re
 from urllib.parse import unquote
 from bs4 import BeautifulSoup
 from text_index import normalize
+from dictionary_media import resource_key,mime_type
 
 
 def human(value):
@@ -43,10 +44,19 @@ def parse(source):
             target=link['href'][8:];query,_,anchor=target.partition('#');query=unquote(query);anchor=unquote(anchor)
         academic=node.find('a',href=re.compile(r'^/definition/academic/'))
         related=unquote(academic['href'].rsplit('/',1)[-1].split('#',1)[0]) if academic else ''
-        result.append({'word':word,'pos':pos.get_text().strip() if pos else '',
-                       'level':level.get_text().strip().upper() if level and re.match(r'^[ABC][12]$',level.get_text().strip().upper()) else '',
-                       'query':query,'anchor':anchor,'relatedWord':related if related.lower()!=word.lower() else '',
-                       'fields':{key:value for key,value in node.attrs.items() if key.startswith('data-')}})
+        audio={}
+        for anchor_node in node.find_all('a',href=re.compile(r'^sound://',re.I)):
+            classes=anchor_node.get('class',[]);variant='UK' if 'pron-uk' in classes else 'US' if 'pron-us' in classes else ''
+            key=resource_key(anchor_node['href'])
+            if variant and key and mime_type(key).startswith('audio/'):
+                values=audio.setdefault(variant,[])
+                if key not in values:values.append(key)
+        row={'word':word,'pos':pos.get_text().strip() if pos else '',
+             'level':level.get_text().strip().upper() if level and re.match(r'^[ABC][12]$',level.get_text().strip().upper()) else '',
+             'query':query,'anchor':anchor,'relatedWord':related if related.lower()!=word.lower() else '',
+             'fields':{key:value for key,value in node.attrs.items() if key.startswith('data-')}}
+        if audio:row['audio']=audio
+        result.append(row)
     return result
 
 
@@ -93,6 +103,8 @@ def select(rows,descriptor):
         if column and not (value==descriptor['value'] if descriptor['value'] else value or phrase):continue
         level=value.upper() if descriptor['kind']=='oxford' else row['level'];category=(value or phrase) if descriptor['kind']=='opal' else ''
         note=('词汇分表 '+category.rsplit('_',1)[-1] if re.match(r'^sublist_\d+$',category) else human(category)) if category else ''
-        result.append({key:row[key] for key in ['word','pos','query','anchor','relatedWord']}|{'level':level,'note':note})
+        selected={key:row[key] for key in ['word','pos','query','anchor','relatedWord']}|{'level':level,'note':note}
+        if row.get('audio'):selected['audio']=row['audio']
+        result.append(selected)
     normalized=normalize
     return {'id':descriptor['id'],'name':descriptor['name'],'group':descriptor['group'],'rows':result,'sourceRecords':len(result),'uniqueWords':len({normalized(row['word']) for row in result})}

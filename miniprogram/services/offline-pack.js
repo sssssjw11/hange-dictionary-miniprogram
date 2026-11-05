@@ -188,7 +188,7 @@ async function wordListCatalog(){
 async function wordList(id){
   const pack=await restore(),catalog=await wordListCatalog();if(!pack||!catalog)return null;
   const descriptor=catalog.find(item=>item.id===id);if(!descriptor)return null;
-  return Object.assign(codec.selectWordList(await wordListRows(pack,descriptor.sourceKey),descriptor),{source:'offline-pack'});
+  return Object.assign(codec.selectWordList(await wordListRows(pack,descriptor.sourceKey),descriptor),{source:'offline-pack',sourceSha256:pack.manifest.sourceSha256||''});
 }
 async function zipEntries(path) {
   const size = await stat(path); if (size < 22 || size > 160*1024*1024) throw new Error('词库压缩分卷体积异常');
