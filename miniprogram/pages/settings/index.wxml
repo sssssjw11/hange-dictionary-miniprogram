@@ -5,6 +5,10 @@
  <view class="small muted voice-note">仅原版在缺少对应录音时停止发音；原版优先可使用系统合成。</view>
  <text class="setting-label">默认英文口音</text>
  <view class="segmented"><button class="{{voiceVariant === 'UK' ? 'chosen' : ''}}" data-variant="UK" bindtap="onVoiceVariant">英式</button><button class="{{voiceVariant === 'US' ? 'chosen' : ''}}" data-variant="US" bindtap="onVoiceVariant">美式</button></view>
+ <view class="voice-catalog-head"><text class="setting-label">已安装合成音色</text><button class="text-button" disabled="{{voiceLoading}}" bindtap="onLoadVoices">{{voiceLoading ? '读取中…' : '读取音色'}}</button></view>
+ <view wx:if="{{voiceCatalogStatus}}" class="small muted voice-note">{{voiceCatalogStatus}}</view>
+ <text class="small muted">当前英文口音的音色</text><picker mode="selector" range="{{voiceOptions}}" range-key="label" value="{{voiceIndex}}" disabled="{{voiceLoading}}" data-kind="en" bindchange="onInstalledVoice"><view class="voice-picker"><text>{{voiceOptions[voiceIndex].label}}</text><text>›</text></view></picker>
+ <text class="small muted">中文合成音色</text><picker mode="selector" range="{{zhVoiceOptions}}" range-key="label" value="{{zhVoiceIndex}}" disabled="{{voiceLoading}}" data-kind="zh" bindchange="onInstalledVoice"><view class="voice-picker"><text>{{zhVoiceOptions[zhVoiceIndex].label}}</text><text>›</text></view></picker>
  <text class="setting-label">合成朗读语速</text>
  <view class="segmented"><button class="{{ttsRate === -2 ? 'chosen' : ''}}" data-rate="-2" bindtap="onTtsRate">慢速</button><button class="{{ttsRate === 0 ? 'chosen' : ''}}" data-rate="0" bindtap="onTtsRate">标准</button><button class="{{ttsRate === 2 ? 'chosen' : ''}}" data-rate="2" bindtap="onTtsRate">快速</button></view>
  <view class="small muted voice-note">原版录音保持原速。已有播放断点使用保存的音源与口音，新播放任务使用这里的默认值。</view>

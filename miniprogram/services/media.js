@@ -1,12 +1,14 @@
 const api=require('./api');
 const store=require('../utils/store');
+const voices=require('./voice-preferences');
 let audio=null,recording=null,capabilities=null,audioGeneration=0,recordGeneration=0,settleAudio=null;
 async function available(force){if(!capabilities||force)capabilities=await api.request('capabilities');return capabilities;}
 async function speak(text,variant,language='en',rate,waitForEnd=false,onStart){
  if(!text||text.length>2500)throw new Error('单次朗读支持 1～2500 字，请选取较短的段落');
  const settings=store.settings();if(variant===undefined)variant=settings.voiceVariant;if(rate===undefined)rate=settings.ttsRate;
  stopAudio();const generation=audioGeneration;
- const data=await api.request('tts',{text,variant,language,rate},'POST',120000);
+ const request={text,variant,language,rate},voice=voices.selected(settings,api.base(),language,variant);if(voice)request.voice=voice;
+ const data=await api.request('tts',request,'POST',120000);
  if(generation!==audioGeneration)return Object.assign({},data,{cancelled:true});
  const file=await new Promise((resolve,reject)=>wx.downloadFile({url:api.base()+data.audioPath,timeout:120000,success(response){response.statusCode===200?resolve(response.tempFilePath):reject(new Error('朗读音频下载失败'));},fail(){reject(new Error('无法下载朗读音频'));}}));
  if(generation!==audioGeneration)return Object.assign({},data,{cancelled:true});

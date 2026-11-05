@@ -29,6 +29,9 @@ class Handler(BaseHTTPRequestHandler):
             elif route.path == '/api/capabilities':
                 if self.features is None:self.features=Features()
                 data = self.features.capabilities()
+            elif route.path == '/api/voices':
+                if self.features is None:self.features=Features()
+                data=self.features.voice_catalog(query.get('refresh',['0'])[0]=='1')
             elif route.path.startswith('/api/audio/'):
                 if self.features is None:self.features=Features()
                 return self.send_audio(self.features.audio(route.path.rsplit('/',1)[1]))
@@ -79,7 +82,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:payload=json.loads(body)
                 except (ValueError,UnicodeDecodeError) as error:raise ValueError('请求不是有效的 JSON') from error
                 if not isinstance(payload,dict):raise ValueError('请求格式无效')
-                if route=='/api/tts':data=self.features.synthesize(payload.get('text',''),payload.get('variant','US'),payload.get('language','en'),payload.get('rate',0))
+                if route=='/api/tts':data=self.features.synthesize(payload.get('text',''),payload.get('variant','US'),payload.get('language','en'),payload.get('rate',0),payload.get('voice',''))
                 elif route=='/api/dictionary-media/resolve':data=self.engine.media.resolve(payload.get('keys'),payload.get('sourceSha256'))
                 else:data=self.features.assistant(payload)
             elif route in ['/api/ocr','/api/asr','/api/document']:

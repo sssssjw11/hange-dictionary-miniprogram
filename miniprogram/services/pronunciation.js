@@ -3,7 +3,7 @@ const MODES=['auto','tts','original'];
 function candidates(entry,text,variant){return ((((entry||{}).oxford||{}).mediaRefs)||[]).filter(row=>row.kind==='audio'&&row.variant===variant&&row.pronunciationText&&store.key(row.pronunciationText)===store.key(text));}
 function voiceLabel(info){
  if(info.kind==='original')return (info.variant==='UK'?'英式':'美式')+' · 原版录音';
- return '系统合成 · '+(info.locale||'本机可用音色')+(info.variantFallback?'（未安装所选口音）':'')+(info.reason?' · '+info.reason:'');
+ return '系统合成 · '+(info.voice?info.voice+' · ':'')+(info.locale||'本机可用音色')+(info.variantFallback?(info.voiceExplicit?'（使用所选音色口音）':'（未安装所选口音）'):'')+(info.reason?' · '+info.reason:'');
 }
 class Pronunciation{
  constructor(){this.files=new ResourceFiles();this.generation=0;this.closed=false;this.missing=new Map();}

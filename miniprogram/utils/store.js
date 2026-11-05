@@ -122,8 +122,17 @@ function importJson(text,group=null){
  for(const incoming of items){let existing=byWord.get(incoming.word);if(!existing){existing=incoming;data.favorites.push(existing);byWord.set(existing.word,existing);count++;}if(group&&!existing.groups.includes(group)){existing.groups.push(group);existing.updated=Date.now();}}
  write(data);return count;
 }
-function settings(){const value=Object.assign({theme:'system',fontSize:16,apiBase:null,online:true,voiceMode:'auto',voiceVariant:'US',ttsRate:0},wx.getStorageSync(SETTINGS)||{});if(!['auto','tts','original'].includes(value.voiceMode))value.voiceMode='auto';if(!['UK','US'].includes(value.voiceVariant))value.voiceVariant='US';if(![-2,0,2].includes(value.ttsRate))value.ttsRate=0;return value;}
-function saveSettings(value){if(value.voiceMode!==undefined&&!['auto','tts','original'].includes(value.voiceMode)||value.voiceVariant!==undefined&&!['UK','US'].includes(value.voiceVariant)||value.ttsRate!==undefined&&![-2,0,2].includes(value.ttsRate))throw new Error('发音设置无效');wx.setStorageSync(SETTINGS,Object.assign(settings(),value));}
+function validVoiceId(value){return typeof value==='string'&&value.length<=160&&!/[\x00-\x1f\x7f]/.test(value);}
+function cleanVoices(value){const result={};if(object(value))for(const key of ['UK','US','zh'])if(validVoiceId(value[key]))result[key]=value[key];return result;}
+function settings(){
+ const value=Object.assign({theme:'system',fontSize:16,apiBase:null,online:true,voiceMode:'auto',voiceVariant:'US',ttsRate:0,ttsVoiceBase:'',ttsVoices:{}},wx.getStorageSync(SETTINGS)||{});
+ if(!['auto','tts','original'].includes(value.voiceMode))value.voiceMode='auto';if(!['UK','US'].includes(value.voiceVariant))value.voiceVariant='US';if(![-2,0,2].includes(value.ttsRate))value.ttsRate=0;
+ value.ttsVoices=cleanVoices(value.ttsVoices);if(typeof value.ttsVoiceBase!=='string'||value.ttsVoiceBase.length>2048||/[\x00-\x1f\x7f]/.test(value.ttsVoiceBase))value.ttsVoiceBase='';return value;
+}
+function saveSettings(value){
+ if(value.voiceMode!==undefined&&!['auto','tts','original'].includes(value.voiceMode)||value.voiceVariant!==undefined&&!['UK','US'].includes(value.voiceVariant)||value.ttsRate!==undefined&&![-2,0,2].includes(value.ttsRate)||value.ttsVoiceBase!==undefined&&(typeof value.ttsVoiceBase!=='string'||value.ttsVoiceBase.length>2048||/[\x00-\x1f\x7f]/.test(value.ttsVoiceBase))||value.ttsVoices!==undefined&&(!object(value.ttsVoices)||Object.keys(value.ttsVoices).some(key=>!['UK','US','zh'].includes(key)||!validVoiceId(value.ttsVoices[key]))))throw new Error('发音设置无效');
+ wx.setStorageSync(SETTINGS,Object.assign(settings(),value));
+}
 function snapshot(){return read();}
 function mergeSnapshot(value){
  if(!object(value)||!Array.isArray(value.favorites)||value.favorites.length>10000||!Array.isArray(value.history)||value.history.length>100)throw new Error('学习备份格式无效');

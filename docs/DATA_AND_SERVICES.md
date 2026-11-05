@@ -125,6 +125,8 @@ Vosk 模型来自 [官方模型清单](https://alphacephei.com/vosk/models)；OC
 
 默认值适用于没有显式选项的发音调用；词条和复习页的英美按钮保留各自明确的口音，连续播放已有断点中的音源和口音优先。英文阅读、例句和每日听力采用默认口音，合成释义也采用统一语速。旧设置缺少字段时使用原版优先、美式、标准；非法偏好不提交，读取历史异常值时使用默认值。设备偏好保存在当前微信设置，学习备份中的播放断点仍保留各自选择。
 
+“读取音色”刷新配套服务已安装且启用的 Windows SAPI 音色；连接服务成功时也会读取列表。当前英文口音和中文各有选择器，英式、美式和中文分别保存，初始均为“自动选择”。列表保留实际名称与语言区域；选择其他口音的音色时，播放状态显示其实际口音。音色仅在保存它的服务地址生效，改用其他服务时不传旧音色名；在新服务选择后替换当前绑定。保存的音色若已不在列表中仍显示原选择，实际发音报错，用户可刷新或改回自动。试听使用当前英文音色，中文选择用于中文释义等朗读；原版录音不受合成音色选择影响。
+
 ## AI / 全文翻译：当前待配置
 
 客户端没有模型密钥输入框；密钥只放在配套服务的环境中。没有配置时 `/api/assistant` 返回明确的 HTTP 503，页面禁用发送，不提供预设“AI 答案”或假译文。
@@ -155,7 +157,8 @@ Vosk 模型来自 [官方模型清单](https://alphacephei.com/vosk/models)；OC
 | `GET /api/supplement?q=` | 当前原词头的简释、词形、WordNet 和原创说明；不含牛津正文 |
 | `GET /api/reverse?q=&cursor=` | 中文反查每页 40 条；返回 `nextCursor`，为 `null` 表示结束 |
 | `GET /api/capabilities` | OCR / TTS / ASR / AI / 翻译 / 文档的真实可用性 |
-| `POST /api/tts` | JSON 请求实际合成语音 |
+| `GET /api/voices?refresh=1` | 已启用音色的实际名称与语言区域；`refresh=1` 重新枚举安装列表 |
+| `POST /api/tts` | JSON 合成请求，含 `text`、`variant`、`language`、`rate` 及可选的已安装音色名 `voice`；返回实际 `voice`、`locale`、`voiceExplicit` 与 `variantFallback` |
 | `GET /api/audio/{name}` | 生成的音频，支持 Range |
 | `POST /api/ocr`、`/api/asr` | multipart 的 `file`；语音可携带 `language` |
 | `POST /api/document` | multipart 的 `file` 和 `filename`，提取用户文档 |

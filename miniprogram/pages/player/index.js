@@ -37,7 +37,7 @@ Page({
     if(!entry)throw new Error('当前词无法播放，可跳过后继续');
     this.setData({message:'准备单词发音…'});if(!this._pronunciation)this._pronunciation=new Pronunciation();
     const result=await this._pronunciation.play(entry,{text:entry.word,variant:this.data.variant,mode:this.data.voiceMode,onStart:info=>{if(!this._closed&&generation===this._run)this.setData({message:info.kind==='original'?'正在播放原版录音':'正在朗读单词',voiceStatus:voiceLabel(info)});}});if(this._closed||generation!==this._run||result.cancelled)return;
-    if(this.data.readMeaning&&this.data.meaning){this.setData({message:'正在朗读释义'});const meaning=await media.speakAndWait(this.data.meaning,undefined,/[\u3400-\u9fff]/.test(this.data.meaning)?'zh':'en',undefined,data=>{if(!this._closed&&generation===this._run)this.setData({voiceStatus:'释义 · 系统合成 · '+(data.locale||'本机音色')});});if(this._closed||generation!==this._run||meaning.cancelled)return;}
+    if(this.data.readMeaning&&this.data.meaning){this.setData({message:'正在朗读释义'});const meaning=await media.speakAndWait(this.data.meaning,undefined,/[\u3400-\u9fff]/.test(this.data.meaning)?'zh':'en',undefined,data=>{if(!this._closed&&generation===this._run)this.setData({voiceStatus:'释义 · '+voiceLabel(Object.assign({},data,{kind:'tts'}))});});if(this._closed||generation!==this._run||meaning.cancelled)return;}
     if(this.data.index===this._words.length-1&&!this.data.loop){this.setData({message:'本轮播放完成'});break;}
     this.setData({message:this.data.interval+' 秒后继续'});await this.wait(this.data.interval*1000);if(this._closed||generation!==this._run)return;
     await this.loadCard((this.data.index+1)%this._words.length);

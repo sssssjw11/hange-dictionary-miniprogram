@@ -58,7 +58,7 @@ def model_runtime_path(path):
 @lru_cache(maxsize=1)
 def voices():
     if os.name!='nt':return []
-    code="Add-Type -AssemblyName System.Speech; $s=[System.Speech.Synthesis.SpeechSynthesizer]::new(); try { @($s.GetInstalledVoices() | ForEach-Object { @{id=$_.VoiceInfo.Name;locale=$_.VoiceInfo.Culture.Name} }) | ConvertTo-Json -Compress } finally { $s.Dispose() }"
+    code="[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); Add-Type -AssemblyName System.Speech; $s=[System.Speech.Synthesis.SpeechSynthesizer]::new(); try { [object[]]$localVoices=@($s.GetInstalledVoices() | Where-Object { $_.Enabled } | ForEach-Object { @{id=$_.VoiceInfo.Name;locale=$_.VoiceInfo.Culture.Name} }); ConvertTo-Json -InputObject $localVoices -Compress } finally { $s.Dispose() }"
     result=subprocess.run(['powershell','-NoProfile','-NonInteractive','-Command',code],capture_output=True,timeout=15,creationflags=HIDDEN)
     if result.returncode:return []
     value=json.loads(result.stdout.decode('utf-8-sig','replace'))
@@ -83,15 +83,25 @@ class Features:
                 'translation':{'available':ai,'reason':'' if ai else '全文翻译需要配置可用模型服务'},
                 'documents':{'available':True,'epub':True,'pdf':has_module('fitz'),'txt':True}}
 
-    def synthesize(self,text,variant='US',language='en',rate=0):
-        if not isinstance(text,str) or variant not in ['US','UK'] or language not in ['en','zh'] or not isinstance(rate,(int,float)):raise ValueError('朗读请求格式无效')
+    def voice_catalog(self,refresh=False):
+        if refresh:voices.cache_clear()
+        available=voices()
+        return {'available':bool(available),'voices':available,'engine':'Windows SAPI' if available else '','reason':'' if available else '当前服务端未安装可用的本地朗读引擎'}
+
+    def synthesize(self,text,variant='US',language='en',rate=0,voice_id=''):
+        if not isinstance(text,str) or variant not in ['US','UK'] or language not in ['en','zh'] or not isinstance(rate,(int,float)) or not isinstance(voice_id,str) or len(voice_id)>160 or re.search(r'[\x00-\x1f\x7f]',voice_id):raise ValueError('朗读请求格式无效')
         text=text.strip()
         if not text or len(text)>2500:raise ValueError('朗读文本须为 1～2500 字')
         available=voices()
         if not available:raise Unavailable('当前服务端没有可用的本地朗读引擎')
         wanted='zh-CN' if language=='zh' else 'en-GB' if variant=='UK' else 'en-US'
-        voice=next((v for v in available if v['locale']==wanted),None)
-        if voice is None:voice=next((v for v in available if v['locale'].startswith('zh' if language=='zh' else 'en')),None)
+        if voice_id:
+            voice=next((v for v in available if v['id']==voice_id),None)
+            if voice is None:raise Unavailable('所选音色未安装，请刷新音色列表或选择自动')
+            if not voice['locale'].startswith(language):raise ValueError('所选音色与朗读语言不同，请重新选择')
+        else:
+            voice=next((v for v in available if v['locale']==wanted),None)
+            if voice is None:voice=next((v for v in available if v['locale'].startswith('zh' if language=='zh' else 'en')),None)
         if voice is None:raise Unavailable('没有安装所选语言的系统语音')
         rate=max(-5,min(5,int(rate)))
         key=hashlib.sha256(json.dumps([text,voice['id'],rate],ensure_ascii=False).encode()).hexdigest()
@@ -111,7 +121,7 @@ class Features:
                 result=subprocess.run([executable,'-nostdin','-v','error','-y','-i',str(wav),'-codec:a','libmp3lame','-b:a','64k',str(mp3)],capture_output=True,timeout=30,creationflags=HIDDEN)
                 if result.returncode:mp3.unlink(missing_ok=True)
             chosen=mp3 if mp3.is_file() else wav
-        return {'audioPath':'/api/audio/'+chosen.name,'voice':voice['id'],'locale':voice['locale'],'variantFallback':voice['locale']!=wanted,'engine':'Windows SAPI','bytes':chosen.stat().st_size}
+        return {'audioPath':'/api/audio/'+chosen.name,'voice':voice['id'],'voiceExplicit':bool(voice_id),'locale':voice['locale'],'variantFallback':voice['locale']!=wanted,'engine':'Windows SAPI','bytes':chosen.stat().st_size}
 
     def audio(self,name):
         if not re.fullmatch('[0-9a-f]{64}\\.(mp3|wav)',name):raise FileNotFoundError('音频不存在')
