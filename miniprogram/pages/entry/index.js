@@ -13,7 +13,7 @@ function entryView(result){
 }
 Page({
   data: { loading: true, error: '', matches: [], resultKind:'', suggestionKind:'', matchPage:0, matchNextCursor:null, matchLoading:false, matchError:'', matchSource:'', supplementLoading:false,supplementError:'',supplementState:'',supplementNote:'', entry: null, favorite: false, groupPicker:false, groupingMeaning:'', bookNames:'', note: '', noteStatus: '', source: '', oxfordBlocks: [], senses: [], examples:[], related:[], referenceRows:[], relatedTotal:0, relatedPage:0, relatedPages:1, contentsOpen:false,contentsLoading:false,contentsPage:0,contentsPages:1,contentsTotal:0,contentsRows:[],localJumpRows:[],focusLabel:'',focusError:'',referenceLoading:false, page: 0, totalPages: 1, theme: 'light', fontSize: 16 },
-  onLoad(options) { let query,anchor;try{query=decodeURIComponent(options.q||'');}catch(_){query=options.q||'';}try{anchor=decodeURIComponent(options.anchor||'');}catch(_){anchor=options.anchor||'';}this._query=query;this.load(query,{anchor}); },
+  onLoad(options) { let query,anchor;try{query=decodeURIComponent(options.q||'');}catch(_){query=options.q||'';}try{anchor=decodeURIComponent(options.anchor||'');}catch(_){anchor=options.anchor||'';}this._query=query;this.load(query,{anchor,reference:options.ref==='1',label:ui.decode(options.label).slice(0,256)}); },
   onShow() { ui.apply(this); if (this._entry) this.refreshFavorite(); },
   async load(word,options={}) {
     const generation = (this._generation || 0) + 1; this._generation = generation; this._query = word;
@@ -144,5 +144,5 @@ Page({
   onKnown(){if(!this._entry)return;try{study.known(this._entry.word,true);wx.showToast({title:'已标为掌握'});}catch(error){ui.error(error);}},
   onSaveExample(event){if(!this._entry)return;const index=this.data.page*8+Number(ui.dataset(event,'index'));const item=((this._entry.oxford||{}).examples||[])[index];if(item)try{sentences.save(item.en,item.zh,'牛津十版 · '+this._entry.word);wx.showToast({title:'例句已收藏'});}catch(error){ui.error(error);}},
   onUnload() { this._generation = (this._generation || 0) + 1;media.stopAudio(); },
-  onShareAppMessage() { const anchor=this._requestedAnchor||'',unique=((((this._entry||{}).oxford||{}).anchors||[]).filter(row=>row.id===anchor).length===1);return { title: this._entry ? this._entry.word + ' · 涵词典' : '涵词典', path: '/pages/entry/index?q=' + encodeURIComponent(this._query)+(anchor&&unique?'&anchor='+encodeURIComponent(anchor):'') }; }
+  onShareAppMessage() { const anchor=this._requestedAnchor||'',unique=((((this._entry||{}).oxford||{}).anchors||[]).filter(row=>row.id===anchor).length===1);return { title: this._entry ? this._entry.word + ' · 涵词典' : '涵词典', path: '/pages/entry/index?q=' + encodeURIComponent(this._query)+(anchor&&unique?'&anchor='+encodeURIComponent(anchor):'')+(this._entry&&this._entry.referenceLabel?'&ref=1&label='+encodeURIComponent(this._entry.referenceLabel):'') }; }
 });

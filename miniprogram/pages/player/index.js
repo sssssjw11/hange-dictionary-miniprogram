@@ -2,6 +2,7 @@ const study=require('../../services/study');
 const dictionary=require('../../services/dictionary');
 const media=require('../../services/media');
 const ui=require('../../utils/ui');
+const store=require('../../utils/store');
 Page({
  data:{theme:'light',deck:'favorites',name:'单词播放',index:0,total:0,word:'',meaning:'',phonetic:'',loading:false,playing:false,error:'',message:'',voiceStatus:'',variant:'US',interval:3,loop:false,readMeaning:false,showMeaning:true},
  onLoad(options){
@@ -19,10 +20,10 @@ Page({
   const generation=++this._load;this._entry=null;this.setData({index,loading:true,error:'',word:this._words[index],meaning:'',phonetic:''});
   try{
    const entry=await dictionary.lookup(this._words[index]);if(this._closed||generation!==this._load)return null;
-   if(entry.kind!=='entry')throw new Error('此词未匹配到释义，可跳过或调整词表');
-   this._entry=entry;this.setData({loading:false,word:entry.word,meaning:entry.brief||entry.zh||(entry.teaching||{}).title||((entry.senses||[])[0]||{}).definition||'',phonetic:(entry.phonetics||{})[this.data.variant==='UK'?'uk':'us']||entry.phonetic||''});
-   this.persist();return entry;
-  }catch(error){if(!this._closed&&generation===this._load)this.setData({loading:false,error:error.message});return null;}
+   if(entry.kind!=='entry'){this._entry={word:this._words[index]};this.setData({loading:false,word:this._words[index],message:'词库未提供独立释义，可朗读词表原文。'});this.persist();return this._entry;}
+   this._entry=Object.assign({},entry,{word:this._words[index]});this.setData({loading:false,word:this._words[index],message:'',meaning:entry.brief||entry.zh||(entry.teaching||{}).title||((entry.senses||[])[0]||{}).definition||'',phonetic:store.key(entry.word)===store.key(this._words[index])?((entry.phonetics||{})[this.data.variant==='UK'?'uk':'us']||entry.phonetic||''):''});
+   this.persist();return this._entry;
+  }catch(error){if(this._closed||generation!==this._load)return null;if(this._entry){this.setData({loading:false,error:error.message});return null;}this._entry={word:this._words[index]};this.setData({loading:false,word:this._words[index],message:'暂未读取到释义，可尝试朗读词表原文。'});try{this.persist();}catch(writeError){this.setData({error:writeError.message});this._entry=null;return null;}return this._entry;}
  },
  persist(){study.playback({deck:this.data.deck,index:this.data.index,word:this._words[this.data.index]||'',variant:this.data.variant,interval:this.data.interval,loop:this.data.loop,readMeaning:this.data.readMeaning,showMeaning:this.data.showMeaning});},
  wait(milliseconds){return new Promise(resolve=>{this._delayResolve=resolve;this._timer=setTimeout(()=>{this._delayResolve=null;resolve();},milliseconds);});},

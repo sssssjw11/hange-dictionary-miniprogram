@@ -13,5 +13,6 @@ Page({
   onNew(event){this.setData({dailyNew:event.detail.value});},onReview(event){this.setData({dailyReview:event.detail.value});},
   onSavePlan(){try{study.plan(this.data.dailyNew,this.data.dailyReview);this.refresh();wx.showToast({title:'计划已保存'});}catch(error){ui.error(error);}},
   onCreate(){wx.showModal({title:'新建词表',editable:true,placeholderText:'词表名称',success:result=>{if(result.confirm && result.content)wx.navigateTo({url:'/pages/wordlist/index?name='+encodeURIComponent(result.content)});}});},
-  onWordlist(event){wx.navigateTo({url:'/pages/wordlist/index?id='+encodeURIComponent(ui.dataset(event,'id'))});}
+  onWordlist(event){wx.navigateTo({url:'/pages/wordlist/index?id='+encodeURIComponent(ui.dataset(event,'id'))});},
+  onOxfordWordlists(){wx.navigateTo({url:'/pages/wordlist/index?source=oxford'});}
 });

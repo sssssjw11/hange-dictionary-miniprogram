@@ -4,6 +4,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { navigation, sensePrefix } from './navigation';
 import {emptyLearning,mergeLearning} from './learning';
 export { focusOxford } from './navigation';
+export {parseWordList,opalWordListFields,describeWordLists,selectWordList} from './catalog';
 
 export { unzlibSync, strFromU8, sha256 };
 export function utf8Length(value) {

@@ -18,6 +18,7 @@ from oxford_summary import oxford_summary, visible_soup
 from oxford_navigation import navigation, sense_prefix, empty_learning, merge_learning
 from text_index import normalize, has_han, query_terms, meaning_rank
 from spelling import eligible as spelling_eligible, rank as spelling_rank
+import wordlists
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -65,7 +66,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.8.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.9.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -163,6 +164,26 @@ class Engine:
                     'SELECT key,word,zh FROM entries WHERE length(key) BETWEEN ? AND ?', (len(key)-tolerance,len(key)+tolerance)))
                 return [{'word':item['word'],'meaning':item['meaning'] or ''} for item in spelling_rank(key,candidates)]
         return []
+
+    @lru_cache(maxsize=2)
+    def _word_list_rows(self,key):
+        pages=self._oxford(key)
+        if not pages:raise ValueError('当前词库没有这份词表')
+        return [row for _,_,html in pages for row in wordlists.parse(html)]
+
+    @lru_cache(maxsize=1)
+    def word_list_catalog(self):
+        if not self.oxford.is_file():return []
+        with closing(connect(self.oxford)) as db:words=sorted({row[0] for row in db.execute("SELECT word FROM entries WHERE word LIKE '@%' AND body IS NOT NULL")})
+        opal=next((word for word in words if word.startswith('@opal_')),None)
+        fields=wordlists.opal_fields(self._word_list_rows(opal)) if opal else {}
+        return wordlists.describe(words,fields)
+
+    def word_list(self,identifier):
+        if not isinstance(identifier,str) or len(identifier)>256:raise ValueError('词表编号无效')
+        descriptor=next((item for item in self.word_list_catalog() if item['id']==identifier),None)
+        if descriptor is None:raise ValueError('词表不存在，请返回目录重新选择')
+        return dict(wordlists.select(self._word_list_rows(descriptor['sourceKey']),descriptor),source='service')
 
     def _chinese_rows(self, term):
         seen = set()

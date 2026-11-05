@@ -38,6 +38,10 @@ class Handler(BaseHTTPRequestHandler):
                 data = self.engine.chinese_page(query.get('q', [''])[0],int(query.get('cursor',['0'])[0]))
             elif route.path == '/api/suggest':
                 data = {'rows': self.engine.suggest(query.get('q', [''])[0])}
+            elif route.path == '/api/wordlists':
+                data = {'rows': self.engine.word_list_catalog()}
+            elif route.path == '/api/wordlist':
+                data = self.engine.word_list(query.get('id',[''])[0])
             else:
                 return self.respond(404, {'error': '接口不存在'})
             self.respond(200, data)

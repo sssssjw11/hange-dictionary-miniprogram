@@ -162,6 +162,32 @@ async function correct(word){
   for(const item of selected){const meta=await metadata(pack,item.id),meaning=pack.manifest.summaryVersion>=2?meta[4]:codec.oxfordSummary((await document(pack,item.id)).html);rows.push({word:item.word,meaning});}
   return rows;
 }
+async function wordListRows(pack,key){
+  if(!pack.wordLists)pack.wordLists=new Map();if(!pack.loadingWordLists)pack.loadingWordLists=new Map();
+  if(pack.wordLists.has(key))return pack.wordLists.get(key);
+  if(pack.loadingWordLists.has(key))return pack.loadingWordLists.get(key);
+  const task=(async()=>{
+    const ids=await references(pack,store.key(key));if(!ids.length)throw new Error('当前词库没有这份词表');
+    const rows=[];for(const id of ids)for(const row of codec.parseWordList((await document(pack,id)).html))rows.push(row);
+    if(pack.wordLists.size>=2)pack.wordLists.delete(pack.wordLists.keys().next().value);pack.wordLists.set(key,rows);return rows;
+  })();
+  pack.loadingWordLists.set(key,task);try{return await task;}finally{pack.loadingWordLists.delete(key);}
+}
+async function wordListCatalog(){
+  const pack=await restore();if(!pack||!pack.manifest.prefixIndex)return null;
+  if(pack.wordListCatalog)return pack.wordListCatalog;if(pack.loadingWordListCatalog)return pack.loadingWordListCatalog;
+  const task=(async()=>{
+    const values=await jsonFile(pack,'prefix/'+codec.hashBucket('@').toString(16).padStart(2,'0')+'.json'),words=((values||{})['@']||[]).map(item=>item[0]).sort();
+    const opal=words.find(word=>/^@opal_/.test(word)),fields=opal?codec.opalWordListFields(await wordListRows(pack,opal)):{};
+    pack.wordListCatalog=codec.describeWordLists(words,fields);return pack.wordListCatalog;
+  })();
+  pack.loadingWordListCatalog=task;try{return await task;}finally{pack.loadingWordListCatalog=null;}
+}
+async function wordList(id){
+  const pack=await restore(),catalog=await wordListCatalog();if(!pack||!catalog)return null;
+  const descriptor=catalog.find(item=>item.id===id);if(!descriptor)return null;
+  return Object.assign(codec.selectWordList(await wordListRows(pack,descriptor.sourceKey),descriptor),{source:'offline-pack'});
+}
 async function zipEntries(path) {
   const size = await stat(path); if (size < 22 || size > 160*1024*1024) throw new Error('词库压缩分卷体积异常');
   const tailLength = Math.min(size, 65557), tail = await chunk(path, size - tailLength, tailLength); let end = -1;
@@ -217,4 +243,4 @@ async function installPack(paths, progress) {
 }
 async function install(paths,progress){if(installing)throw new Error('已有词库导入正在进行');installing=true;progressState={working:true,progress:0,message:'检查词库分卷',error:''};try{const result=await installPack(paths,(message,value)=>{progressState={working:true,message,progress:Math.min(100,Math.round(value)),error:''};if(progress)progress(message,value);});progressState.message='牛津词库已完整导入';return result;}catch(error){progressState.error=error.message;progressState.message='导入未完成，学习记录保持不变';throw error;}finally{installing=false;progressState.working=false;}}
 async function remove() { if(installing)throw new Error('请等待当前词库导入结束');active = null; restoring = null; const root = pathRoot(); if (!root.startsWith(wx.env.USER_DATA_PATH + '/')) throw new Error('非法词库路径'); try { await call('rmdir', { dirPath: root, recursive: true }); } catch (error) { if (!missing(error)) throw error; } await clearStages();wx.removeStorageSync(POINTER);progressState={working:false,progress:0,message:'离线词库已移除',error:''}; }
-module.exports = { lookup, status, progress(){return Object.assign({},progressState);}, suggest, correct, install, remove, zipEntries, validateManifest, _reset() { active = null; restoring = null; } };
+module.exports = { lookup, status, progress(){return Object.assign({},progressState);}, suggest, correct, wordListCatalog, wordList, install, remove, zipEntries, validateManifest, _reset() { active = null; restoring = null; } };

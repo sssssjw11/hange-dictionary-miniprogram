@@ -30,6 +30,18 @@ function parseWords(source){
  return Array.from(new Set(result));
 }
 function deleteDeck(id) { const data = state(); data.decks = data.decks.filter(deck => deck.id !== id); if (data.pending && data.pending.deck === id) data.pending = null; save(data); }
+function sourceDeck(sourceId){return state().decks.find(deck=>deck.sourceKey==='oxford:'+sourceId)||null;}
+function importSourceDeck(sourceId,name,rawWords){
+  if(typeof sourceId!=='string'||!sourceId||sourceId.length>256||/[\x00-\x1f]/.test(sourceId))throw new Error('词表来源无效');
+  const data=state(),existing=data.decks.find(deck=>deck.sourceKey==='oxford:'+sourceId);if(existing)return existing.id;
+  if(!Array.isArray(rawWords))throw new Error('词表内容无效');
+  name=String(name).trim();if(!name)throw new Error('词表名称不能为空');
+  const words=Array.from(new Set(rawWords.map(store.key)));
+  if(!words.length||words.length>10000||words.some(word=>!word||word.length>256||/[\x00-\x1f]/.test(word)))throw new Error('这份词表超出支持范围，未修改已有记录');
+  if(data.decks.length>=30)throw new Error('最多保存 30 个自定义词表，请先整理已有词表');
+  const id='deck-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+  data.decks.push({id,name:Array.from(String(name)).slice(0,40).join(''),words,created:Date.now(),sourceKey:'oxford:'+sourceId});save(data);return id;
+}
 function queue(deck, now = Date.now(), practice = false) {
   const data = state(), today = data.days[dayKey(now)] || { new:0, review:0 };
   const members = words(deck,data).filter(word => !(data.cards[word] || {}).known);
@@ -62,4 +74,4 @@ function pending(value) { const data = state(); if (value !== undefined) { data.
 function playback(value){const data=state();if(value!==undefined){data.playback=value;save(data);}return data.playback||null;}
 function stats(now = Date.now()) { const data = state(), cards = Object.values(data.cards), today = data.days[dayKey(now)] || {new:0,review:0,attempts:0,correct:0,seconds:0}; const days = []; for (let i = 6; i >= 0; i--) { const key = dayKey(now-i*DAY), value=data.days[key] || {new:0,review:0}; days.push({date:key.slice(5),count:value.new+value.review}); } let streak=0; for (let i=0;i<400;i++) { const day=data.days[dayKey(now-i*DAY)]; if (day && day.attempts) streak++; else if (i!==0) break; } return {today,days,streak,learned:cards.length,mastered:cards.filter(card=>card.known || card.interval>=21).length,due:cards.filter(card=>!card.known && card.due<=now).length,plan:data.plan,pending:data.pending}; }
 function checkSpelling(answer, target) { return store.key(answer) === store.key(target); }
-module.exports = { decks, words, createDeck, deleteDeck, queue, review, known, mastered, plan, pending, playback, stats, checkSpelling, dayKey };
+module.exports = { decks, words, createDeck, sourceDeck, importSourceDeck, deleteDeck, queue, review, known, mastered, plan, pending, playback, stats, checkSpelling, dayKey };

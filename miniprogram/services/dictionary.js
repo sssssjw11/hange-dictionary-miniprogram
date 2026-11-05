@@ -131,4 +131,14 @@ async function supplement(word,options={}){
     throw error;
   }
 }
-module.exports = { lookup, matchPage, supplement, mergeSupplement, suggest, status, offlineCount: Object.keys(offline.entries).length, reset() { health.checked = 0; } };
+async function wordListCatalog(){
+  const rows=await offlinePack.wordListCatalog();if(rows&&rows.length)return rows;
+  if(!base())throw new Error('请先导入完整牛津词库，或连接新版配套服务');
+  try{return (await request('wordlists')).rows;}catch(error){if(error.message==='接口不存在')throw new Error('请更新配套服务，或导入包含牛津词表的完整离线词库');throw error;}
+}
+async function wordList(id){
+  const local=await offlinePack.wordList(id);if(local)return local;
+  if(!base())throw new Error('请先导入完整牛津词库，或连接新版配套服务');
+  return request('wordlist',{id});
+}
+module.exports = { lookup, matchPage, supplement, mergeSupplement, suggest, status, wordListCatalog, wordList, offlineCount: Object.keys(offline.entries).length, reset() { health.checked = 0; } };
