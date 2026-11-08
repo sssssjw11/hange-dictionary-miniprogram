@@ -10,6 +10,7 @@ Page({
   onContinue(){const pending=study.pending();if(pending)wx.navigateTo({url:'/pages/review/index?resume=1'});},
   onMastered(){wx.navigateTo({url:'/pages/wordlist/index?id=mastered'});},
   onStatistics(){wx.navigateTo({url:'/pages/statistics/index'});},
+  onVocabulary(){wx.navigateTo({url:'/pages/vocabulary/index'});},
   onPlayer(){wx.navigateTo({url:'/pages/player/index?deck='+encodeURIComponent(this.data.deck)});},
   onNew(event){this.setData({dailyNew:event.detail.value});},onReview(event){this.setData({dailyReview:event.detail.value});},
   onSavePlan(){try{study.plan(this.data.dailyNew,this.data.dailyReview);this.refresh();wx.showToast({title:'计划已保存'});}catch(error){ui.error(error);}},

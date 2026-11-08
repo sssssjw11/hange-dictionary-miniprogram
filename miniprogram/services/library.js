@@ -24,6 +24,7 @@ function ranges(text,maxLength=1800){
  return result.length?result:[{start:0,end:0,text:''}];
 }
 function pages(text,maxLength=1800){return ranges(text,maxLength).map(page=>page.text);}
+function scanWords(text,visit){const expression=new RegExp(WORD.source,'g');let match;while((match=expression.exec(text)))visit(match[0],match.index);}
 function tokens(text,start=0){
  const result=[];let offset=0;WORD.lastIndex=0;let match;
  function nonwords(end){for(const value of text.slice(offset,end)){const begin=offset;offset+=value.length;result.push({id:start+begin,start:start+begin,end:start+offset,text:value,word:''});}}
@@ -89,4 +90,4 @@ function decorated(text,start=0,marks=[],selection=null,search=null){
  }
  return result;
 }
-module.exports={list,get,add,remove,progress,pages,ranges,tokens,annotations,annotationSummaries,mark,removeAnnotation,bookmark,pageForOffset,decorated,validAnnotation,validateArticleAnnotations,excerpt:preview};
+module.exports={list,get,add,remove,progress,pages,ranges,tokens,scanWords,annotations,annotationSummaries,mark,removeAnnotation,bookmark,pageForOffset,decorated,validAnnotation,validateArticleAnnotations,excerpt:preview};

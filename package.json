@@ -1,6 +1,6 @@
 {
   "name": "hange-dictionary-miniprogram",
-  "version": "2.26.0",
+  "version": "2.27.0",
   "private": true,
   "description": "Native WeChat dictionary with local learning records and a read-only dictionary API",
   "scripts": {

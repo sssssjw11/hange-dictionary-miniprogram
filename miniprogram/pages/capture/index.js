@@ -62,6 +62,7 @@ Page({
  onWord(event){ui.open(ui.dataset(event));},
  onLookup(){const text=this.data.text.trim();if(text.length>256)return ui.error(new Error('全文可使用翻译；查词请从下方选择一个单词或短语'));if(text)ui.open(text);},
  onTranslate(){if(this.data.text.trim())wx.navigateTo({url:'/pages/translate/index',success:result=>result.eventChannel.emit('source',{text:this.data.text})});},
+ onVocabulary(){if(!this.data.busy&&!this.data.recording&&this.data.text.trim())wx.navigateTo({url:'/pages/vocabulary/index',success:result=>result.eventChannel.emit('source',{text:this.data.text,title:'识别与粘贴文字'})});},
  onCopy(){if(this.data.text)wx.setClipboardData({data:this.data.text});},
  onHide(){this._visible=false;if(this._nativeMedia)return;this._generation++;clearInterval(this._timer);media.stopRecord(true);},
  onUnload(){this._closed=true;this._nativeMedia=false;this.onHide();}

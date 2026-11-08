@@ -15,6 +15,7 @@
     "pages/review/index",
     "pages/player/index",
     "pages/wordlist/index",
+    "pages/vocabulary/index",
     "pages/capture/index",
     "pages/translate/index",
     "pages/library/index",

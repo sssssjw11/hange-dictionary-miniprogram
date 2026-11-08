@@ -73,6 +73,12 @@ test('daily shadowing exposes real recording states and prevents source audio fr
   const recorded=compile('pages/daily/index.wxml')(Object.assign({},data,{recording:false,recordReady:true,recordDuration:'2.3 秒',replaying:true}));assert.ok(text(recorded).includes('重新录音'));assert.ok(text(recorded).includes('停止回听'));assert.ok(text(recorded).includes('2.3 秒'));
 });
 
+test('candidate vocabulary uses native checkboxes, exact source snippets and explicit matched-only import controls',()=>{
+  const data={theme:'light',editing:false,hasSource:true,article:true,sourceTitle:'Reading',uniqueTotal:1,occurrences:2,total:1,filter:'new',hideMastered:true,sortNames:['按出现次数'],sortIndex:0,rows:[{word:'café',count:2,start:3,end:7,before:'An ',hit:'CAFÉ',after:' nearby.',status:'已匹配',meaning:'actual definition',checked:true}],selectedCount:1,readyCount:1,listPages:1,listPage:0,name:'From reading',busy:false};
+  const result=compile('pages/vocabulary/index.wxml')(data),all=nodes(result);assert.ok(all.some(node=>node.tag==='wx-checkbox'&&node.attr.checked===true));assert.ok(text(result).includes('CAFÉ'));assert.ok(text(result).includes('加入已匹配词 1'));assert.ok(all.some(node=>node.attr&&node.attr.bindtap==='onOriginal'));assert.equal(all.find(node=>node.attr&&node.attr.bindtap==='onAdd').attr.disabled,false);
+  const busy=compile('pages/vocabulary/index.wxml')(Object.assign({},data,{busy:true,completed:1,taskTotal:3}));assert.ok(text(busy).includes('正在匹配 1 / 3'));assert.equal(nodes(busy).find(node=>node.attr&&node.attr.bindtap==='onAdd').attr.disabled,true);
+});
+
 test('spelling suggestions keep the typed query and offer word buttons without Chinese pagination or an irrelevant retry',()=>{
   const data={loading:false,entry:null,resultKind:'missing',suggestionKind:'spelling',matchQuery:'semantci',matches:[{word:'semantic',meaning:'原创释义'}],error:'未找到这个拼写，选择下面的词条继续查词。',matchPage:0,matchNextCursor:null,partial:false};
   const result=compile('pages/entry/index.wxml')(data),all=nodes(result),copy=text(result);

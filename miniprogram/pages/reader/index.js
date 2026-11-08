@@ -13,7 +13,7 @@ Page({
   this._closed=false;this._id=ui.decode(options.id);this._lookup=0;this._readGeneration=0;this._searchHits=null;this._searchRange=null;this._scrollGeneration=0;
   try{const article=library.get(this._id);if(!article)throw new Error('阅读材料不存在');this._article=article;this._ranges=library.ranges(article.text);this._pages=this._ranges.map(page=>page.text);this.setData({title:article.title,total:this._ranges.length});const offset=options.offset===undefined?null:Number(options.offset);this.showPage(offset!==null&&Number.isFinite(offset)?library.pageForOffset(this._ranges,offset):Math.min(article.progress||0,this._ranges.length-1));wx.setNavigationBarTitle({title:article.title});if(offset!==null)this.scrollToOffset(offset);}catch(error){this.setData({error:error.message});}
  },
- onShow(){ui.apply(this);this.refreshArticle();},
+ onShow(){ui.apply(this);this.refreshArticle();const jump=this._vocabularyJump;this._vocabularyJump=null;if(jump&&this._article&&jump.article===this._id&&Number.isInteger(jump.offset)&&jump.offset>=0&&typeof jump.surface==='string'&&jump.surface.length>0&&jump.surface.length<=128&&this._article.text.slice(jump.offset,jump.offset+jump.surface.length)===jump.surface){this.onSearchClose();this.jumpOffset(jump.offset);}},
  refreshArticle(){
   try{const article=library.get(this._id);if(!article){this.stopReading('阅读材料已移除，朗读已停止');this.resetSearch();this._article=null;this.setData({tokens:[],total:0,error:'阅读材料已移除',searchOpen:false});return;}if(!this._article||article.text!==this._article.text){this.stopReading('阅读材料已更新，朗读已停止');this.resetSearch('正文已更新，请重新查找');this._ranges=library.ranges(article.text);this._pages=this._ranges.map(page=>page.text);this._selection=null;this._anchor=null;}this._article=article;this.setData({title:article.title,total:this._ranges.length});this.renderTokens();}catch(error){ui.error(error);}
  },
@@ -106,5 +106,6 @@ Page({
  },
  onSavePassage(){if(!this._article)return;try{sentences.save(this._pages[this.data.page],'',this._article.title);wx.showToast({title:'已存为例句卡片'});}catch(error){ui.error(error);}},
  onTranslate(){if(this._article)wx.navigateTo({url:'/pages/translate/index',success:result=>result.eventChannel.emit('source',{text:this._pages[this.data.page]})});},
+ onVocabulary(){if(!this._article)return;this.stopReading('提取单词时朗读已暂停');wx.navigateTo({url:'/pages/vocabulary/index?article='+encodeURIComponent(this._id)+'&returnToReader=1',success:result=>result.eventChannel.on('vocabularyPosition',value=>{if(!this._closed)this._vocabularyJump=value;})});},
  onHide(){this._lookup++;this._scrollGeneration=(this._scrollGeneration||0)+1;this.stopReading('离开页面后朗读已暂停');},onUnload(){this._closed=true;this._searchHits=null;this._searchRange=null;this.onHide();}
 });
