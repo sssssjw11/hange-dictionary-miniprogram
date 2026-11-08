@@ -10,13 +10,11 @@ function normalizedMap(raw){
  append();if(chars[chars.length-1]===' '){chars.pop();starts.pop();ends.pop();}
  return {text:chars.join(''),starts,ends};
 }
-function find(blocks,query){
- const needle=store.key(query);if(!needle||needle.length>256)return [];
- const pieces=(blocks||[]).map(block=>(block.nodes||[]).map(nodeText).join('')),ends=[];let length=0;for(const piece of pieces){length+=piece.length;ends.push(length);}if(!length)return [];
- const raw=pieces.join(''),mapped=normalizedMap(raw),canonical=store.key(raw),hits=[];
+function scan(raw,query,emit){
+ const needle=store.key(query);if(!needle||needle.length>256||!raw)return 0;
+ const mapped=normalizedMap(raw),canonical=store.key(raw);let count=0;
  function add(start,end,contextual=false){
-  if(!contextual&&store.key(raw.slice(start,end))!==needle)return;let low=0,high=ends.length-1;while(low<high){const middle=(low+high)>>>1;if(ends[middle]>start)high=middle;else low=middle+1;}
-  hits.push({blockIndex:low,offset:start-(low?ends[low-1]:0),start,end});
+  if(!contextual&&store.key(raw.slice(start,end))!==needle)return;count++;if(emit)emit(start,end);
  }
  let sameShape=mapped.text.length===canonical.length;for(let index=0;sameShape&&index<canonical.length;index++)sameShape=mapped.text[index]===canonical[index]||('σς'.includes(mapped.text[index])&&'σς'.includes(canonical[index]));
  if(sameShape){
@@ -25,6 +23,10 @@ function find(blocks,query){
   const pattern=Array.from(needle).map(char=>char===' '?'[\\s_]+':char==="'"?"['’]":char.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('');
   const expression=new RegExp(pattern,'giu');let match;while((match=expression.exec(raw))){add(match.index,match.index+match[0].length);expression.lastIndex=match.index+(raw.codePointAt(match.index)>0xffff?2:1);}
  }
- return hits;
+ return count;
 }
-module.exports={find};
+function find(blocks,query){
+ const pieces=(blocks||[]).map(block=>(block.nodes||[]).map(nodeText).join('')),ends=[];let length=0;for(const piece of pieces){length+=piece.length;ends.push(length);}if(!length)return [];
+ const hits=[];scan(pieces.join(''),query,(start,end)=>{let low=0,high=ends.length-1;while(low<high){const middle=(low+high)>>>1;if(ends[middle]>start)high=middle;else low=middle+1;}hits.push({blockIndex:low,offset:start-(low?ends[low-1]:0),start,end});});return hits;
+}
+module.exports={find,scan};

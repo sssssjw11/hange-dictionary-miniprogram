@@ -5,28 +5,40 @@ const media=require('../../services/media');
 const store=require('../../utils/store');
 const ui=require('../../utils/ui');
 const chinese=require('../../utils/chinese');
+const search=require('../../utils/reader-search');
 const {voiceLabel}=require('../../services/pronunciation');
 Page({
- data:{theme:'light',fontSize:16,title:'',tokens:[],page:0,total:0,popup:false,word:'',meaning:'',looking:false,canFavorite:false,error:'',markMode:false,hasSelection:false,selectionLength:0,selectionQuote:'',annotationsCount:0,bookmarked:false,hasCurrentMark:false,groupPicker:false,groupWord:'',groupMeaning:'',reading:false,readContinuous:false,readStatus:'',readError:''},
+ data:{theme:'light',fontSize:16,title:'',tokens:[],page:0,total:0,popup:false,word:'',meaning:'',looking:false,canFavorite:false,error:'',markMode:false,hasSelection:false,selectionLength:0,selectionQuote:'',annotationsCount:0,bookmarked:false,hasCurrentMark:false,groupPicker:false,groupWord:'',groupMeaning:'',reading:false,readContinuous:false,readStatus:'',readError:'',searchOpen:false,searchQuery:'',searchTotal:0,searchIndex:0,searchError:''},
  onLoad(options){
-  this._closed=false;this._id=ui.decode(options.id);this._lookup=0;this._readGeneration=0;
+  this._closed=false;this._id=ui.decode(options.id);this._lookup=0;this._readGeneration=0;this._searchHits=null;this._searchRange=null;this._scrollGeneration=0;
   try{const article=library.get(this._id);if(!article)throw new Error('阅读材料不存在');this._article=article;this._ranges=library.ranges(article.text);this._pages=this._ranges.map(page=>page.text);this.setData({title:article.title,total:this._ranges.length});const offset=options.offset===undefined?null:Number(options.offset);this.showPage(offset!==null&&Number.isFinite(offset)?library.pageForOffset(this._ranges,offset):Math.min(article.progress||0,this._ranges.length-1));wx.setNavigationBarTitle({title:article.title});if(offset!==null)this.scrollToOffset(offset);}catch(error){this.setData({error:error.message});}
  },
  onShow(){ui.apply(this);this.refreshArticle();},
  refreshArticle(){
-  try{const article=library.get(this._id);if(!article){this.stopReading('阅读材料已移除，朗读已停止');this._article=null;this.setData({tokens:[],total:0,error:'阅读材料已移除'});return;}if(!this._article||article.text!==this._article.text){this.stopReading('阅读材料已更新，朗读已停止');this._ranges=library.ranges(article.text);this._pages=this._ranges.map(page=>page.text);this._selection=null;this._anchor=null;}this._article=article;this.setData({title:article.title,total:this._ranges.length});this.renderTokens();}catch(error){ui.error(error);}
+  try{const article=library.get(this._id);if(!article){this.stopReading('阅读材料已移除，朗读已停止');this.resetSearch();this._article=null;this.setData({tokens:[],total:0,error:'阅读材料已移除',searchOpen:false});return;}if(!this._article||article.text!==this._article.text){this.stopReading('阅读材料已更新，朗读已停止');this.resetSearch('正文已更新，请重新查找');this._ranges=library.ranges(article.text);this._pages=this._ranges.map(page=>page.text);this._selection=null;this._anchor=null;}this._article=article;this.setData({title:article.title,total:this._ranges.length});this.renderTokens();}catch(error){ui.error(error);}
  },
  renderTokens(){
   if(!this._article||!this._ranges.length)return;const index=Math.min(this.data.page,this._ranges.length-1),page=this._ranges[index],marks=this._article.annotations||[],selection=this._selection;
-  this.setData({page:index,tokens:library.decorated(page.text,page.start,marks,selection),annotationsCount:marks.length,bookmarked:marks.some(item=>item.kind==='bookmark'&&item.start===page.start),hasSelection:!!selection,selectionLength:selection?selection.end-selection.start:0,selectionQuote:selection?library.excerpt(this._article.text.slice(selection.start,selection.end),120):''});
+  this.setData({page:index,tokens:library.decorated(page.text,page.start,marks,selection,this._searchRange),annotationsCount:marks.length,bookmarked:marks.some(item=>item.kind==='bookmark'&&item.start===page.start),hasSelection:!!selection,selectionLength:selection?selection.end-selection.start:0,selectionQuote:selection?library.excerpt(this._article.text.slice(selection.start,selection.end),120):''});
  },
  showPage(index,options={}){
-  if(!this._ranges||!this._ranges.length)return;const wasReading=this.data.reading;if(!options.reading)this.stopReading();index=Math.max(0,Math.min(index,this._ranges.length-1));this._lookup++;this._entry=null;this.setData(Object.assign({page:index,popup:false},options.reading?{}:{readStatus:wasReading?'已停止朗读':'',readError:''}));this.renderTokens();
+  if(!this._ranges||!this._ranges.length)return;const wasReading=this.data.reading;if(!options.reading)this.stopReading();this._scrollGeneration=(this._scrollGeneration||0)+1;index=Math.max(0,Math.min(index,this._ranges.length-1));this._lookup++;this._entry=null;this.setData(Object.assign({page:index,popup:false},options.reading?{}:{readStatus:wasReading?'已停止朗读':'',readError:''}));this.renderTokens();
   try{library.progress(this._id,index);}catch(error){ui.error(error);}wx.pageScrollTo({scrollTop:0,duration:0});
  },
  onPrev(){this.showPage(this.data.page-1);},onNext(){this.showPage(this.data.page+1);},
- scrollToOffset(offset){const run=()=>{if(!this._closed)wx.pageScrollTo({selector:'#reader-token-'+offset,duration:180,fail:()=>wx.pageScrollTo({scrollTop:0,duration:0})});};if(wx.nextTick)wx.nextTick(run);else setTimeout(run,0);},
+ scrollToOffset(offset){const generation=this._scrollGeneration=(this._scrollGeneration||0)+1,run=()=>{if(!this._closed&&generation===this._scrollGeneration)wx.pageScrollTo({selector:'#reader-token-'+offset,duration:180,fail:()=>{if(!this._closed&&generation===this._scrollGeneration)wx.pageScrollTo({scrollTop:0,duration:0});}});};if(wx.nextTick)wx.nextTick(run);else setTimeout(run,0);},
  jumpOffset(offset){if(!this._article)return;offset=Math.max(0,Math.min(Number(offset)||0,this._article.text.length-1));this._selection=null;this._anchor=null;this.setData({markMode:false});this.showPage(library.pageForOffset(this._ranges,offset));this.scrollToOffset(offset);},
+ resetSearch(message=''){this._searchHits=null;this._searchRange=null;this._scrollGeneration=(this._scrollGeneration||0)+1;this.setData({searchTotal:0,searchIndex:0,searchError:message});},
+ onSearchOpen(){if(!this._article)return;this.stopReading('查找时朗读已暂停');this._lookup++;this._entry=null;const generation=this._scrollGeneration=(this._scrollGeneration||0)+1;this.setData({searchOpen:true,popup:false},()=>{if(!this._closed&&generation===this._scrollGeneration)wx.pageScrollTo({selector:'#reader-search',duration:180});});},
+ onSearchInput(event){this.resetSearch();this.setData({searchQuery:event.detail.value});this.renderTokens();},
+ onSearchRun(){
+  if(!this._article)return;this.stopReading('查找时朗读已暂停');this.resetSearch();this._selection=null;this._anchor=null;this.setData({markMode:false});
+  try{this._searchHits=search.find(this._article.text,this.data.searchQuery);const total=this._searchHits.length/2;this.setData({searchOpen:true,searchTotal:total,searchIndex:0,searchError:total?'':'正文中未找到此内容，请调整词句。'});if(total)this.showSearch(0);else this.renderTokens();}
+  catch(error){this.setData({searchOpen:true,searchError:error.message});this.renderTokens();}
+ },
+ showSearch(index){const range=search.range(this._searchHits,index);if(!range)return;this._searchRange=range;this.setData({searchIndex:index,searchError:''});this.jumpOffset(range.start);},
+ onSearchPrev(){this.showSearch(this.data.searchIndex-1);},onSearchNext(){this.showSearch(this.data.searchIndex+1);},
+ onSearchClose(){this.resetSearch();this.setData({searchOpen:false});this.renderTokens();},
  token(event){const value=event.currentTarget.dataset;return {start:Number(value.start),end:Number(value.end),wordStart:Number(value.wordStart),wordEnd:Number(value.wordEnd)};},
  covers(start,end){return (this._article.annotations||[]).filter(item=>item.start<end&&item.end>start).sort((a,b)=>b.updated-a.updated);},
  onToken(event){
@@ -94,5 +106,5 @@ Page({
  },
  onSavePassage(){if(!this._article)return;try{sentences.save(this._pages[this.data.page],'',this._article.title);wx.showToast({title:'已存为例句卡片'});}catch(error){ui.error(error);}},
  onTranslate(){if(this._article)wx.navigateTo({url:'/pages/translate/index',success:result=>result.eventChannel.emit('source',{text:this._pages[this.data.page]})});},
- onHide(){this._lookup++;this.stopReading('离开页面后朗读已暂停');},onUnload(){this._closed=true;this.onHide();}
+ onHide(){this._lookup++;this._scrollGeneration=(this._scrollGeneration||0)+1;this.stopReading('离开页面后朗读已暂停');},onUnload(){this._closed=true;this._searchHits=null;this._searchRange=null;this.onHide();}
 });

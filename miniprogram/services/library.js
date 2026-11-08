@@ -73,17 +73,18 @@ function bookmark(articleId,offset,label=''){
  mark(articleId,offset,offset+first.length,String(label||'阅读书签').slice(0,120),'blue','','bookmark');return true;
 }
 function pageForOffset(pages,offset){let low=0,high=pages.length-1;while(low<high){const middle=Math.floor((low+high+1)/2);if(pages[middle].start<=offset)low=middle;else high=middle-1;}return low;}
-function decorated(text,start=0,marks=[],selection=null){
+function decorated(text,start=0,marks=[],selection=null,search=null){
  const relevant=marks.filter(item=>item.start<start+text.length&&item.end>start).sort((a,b)=>a.updated-b.updated),result=[];
  for(const token of tokens(text,start)){
   const cuts=new Set([token.start,token.end]);
   for(const mark of relevant){if(mark.start>token.start&&mark.start<token.end)cuts.add(mark.start);if(mark.end>token.start&&mark.end<token.end)cuts.add(mark.end);}
   if(selection){for(const edge of [selection.start,selection.end])if(edge>token.start&&edge<token.end)cuts.add(edge);}
+  if(search){for(const edge of [search.start,search.end])if(edge>token.start&&edge<token.end)cuts.add(edge);}
   const points=Array.from(cuts).sort((a,b)=>a-b);
   for(let index=0;index<points.length-1;index++){
    const begin=points[index],end=points[index+1],cover=relevant.filter(item=>item.kind==='highlight'&&item.start<=begin&&item.end>=end),chosen=cover[cover.length-1];
    const lookup=!!token.word&&token.word.length<=256;
-   result.push({id:begin+'-'+end,text:text.slice(begin-start,end-start),word:lookup,wordStart:lookup?token.start:-1,wordEnd:lookup?token.end:-1,start:begin,end,color:chosen?chosen.color:'',marked:!!cover.length,selected:!!selection&&selection.start<end&&selection.end>begin});
+   result.push({id:begin+'-'+end,text:text.slice(begin-start,end-start),word:lookup,wordStart:lookup?token.start:-1,wordEnd:lookup?token.end:-1,start:begin,end,color:chosen?chosen.color:'',marked:!!cover.length,selected:!!selection&&selection.start<end&&selection.end>begin,searchMatch:!!search&&search.start<end&&search.end>begin});
   }
  }
  return result;

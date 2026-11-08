@@ -55,6 +55,12 @@ test('reader exposes a stop control and the actual voice while continuous readin
   const result=compile('pages/reader/index.wxml')(data);assert.ok(text(result).includes('停止连读'));assert.ok(text(result).includes('系统合成 · Sample voice'));assert.ok(nodes(result).some(node=>node.attr&&node.attr.bindtap==='onReadAll'));
 });
 
+test('reader search renders the matching source span and bounds the result navigation',()=>{
+  const data={theme:'light',title:'Reading',total:2,page:0,searchOpen:true,searchQuery:'find',searchTotal:2,searchIndex:0,tokens:[{id:'3-7',start:3,end:7,text:'find',word:true,wordStart:3,wordEnd:7,searchMatch:true,color:'green'}]};
+  const result=compile('pages/reader/index.wxml')(data),all=nodes(result);assert.ok(text(result).includes('找到 2 处'));assert.ok(all.some(node=>node.attr&&node.attr.id==='reader-token-3'&&node.attr.class.includes('reader-search-hit')&&node.attr.class.includes('mark-green')));assert.equal(all.find(node=>node.attr&&node.attr.bindtap==='onSearchPrev').attr.disabled,true);assert.equal(all.find(node=>node.attr&&node.attr.bindtap==='onSearchNext').attr.disabled,false);
+  const closed=compile('pages/reader/index.wxml')(Object.assign({},data,{searchOpen:false}));assert.ok(!nodes(closed).some(node=>node.attr&&node.attr.bindtap==='onSearchNext'));
+});
+
 test('spelling suggestions keep the typed query and offer word buttons without Chinese pagination or an irrelevant retry',()=>{
   const data={loading:false,entry:null,resultKind:'missing',suggestionKind:'spelling',matchQuery:'semantci',matches:[{word:'semantic',meaning:'原创释义'}],error:'未找到这个拼写，选择下面的词条继续查词。',matchPage:0,matchNextCursor:null,partial:false};
   const result=compile('pages/entry/index.wxml')(data),all=nodes(result),copy=text(result);
