@@ -61,6 +61,12 @@ test('reader search renders the matching source span and bounds the result navig
   const closed=compile('pages/reader/index.wxml')(Object.assign({},data,{searchOpen:false}));assert.ok(!nodes(closed).some(node=>node.attr&&node.attr.bindtap==='onSearchNext'));
 });
 
+test('learning history renders honest partial records, native date selection and paginated word links',()=>{
+  const data={theme:'light',date:'2026-11-08',today:'2026-11-08',start:'2025-10-05',period:7,filter:'all',selected:{new:1,review:25,attempts:26,rate:'50%',duration:'2 分 0 秒'},summary:{attempts:26,duration:'2 分 0 秒'},days:[{date:'2026-11-08',label:'11-08',count:26,height:150}],partial:true,recorded:25,historyLimit:2000,rows:[{id:'one',word:'apple',grade:'again',gradeLabel:'忘记',modeLabel:'单词拼写',time:'12:00',duration:'5 秒',first:false}],page:0,pages:2};
+  const result=compile('pages/statistics/index.wxml')(data),all=nodes(result);assert.ok(text(result).includes('只有汇总数据'));assert.ok(text(result).includes('apple'));assert.ok(all.some(node=>node.tag==='wx-picker'&&node.attr.mode==='date'));assert.ok(all.some(node=>node.attr&&node.attr.bindtap==='onWord'));assert.equal(all.find(node=>node.attr&&node.attr.bindtap==='onPrev').attr.disabled,true);assert.equal(all.find(node=>node.attr&&node.attr.bindtap==='onNext').attr.disabled,false);
+  const empty=compile('pages/statistics/index.wxml')(Object.assign({},data,{rows:[],recorded:0,pages:0,partial:false,selected:{attempts:0}}));assert.ok(text(empty).includes('这一天还没有提交学习记录'));assert.ok(!text(empty).includes('只有汇总数据'));
+});
+
 test('spelling suggestions keep the typed query and offer word buttons without Chinese pagination or an irrelevant retry',()=>{
   const data={loading:false,entry:null,resultKind:'missing',suggestionKind:'spelling',matchQuery:'semantci',matches:[{word:'semantic',meaning:'原创释义'}],error:'未找到这个拼写，选择下面的词条继续查词。',matchPage:0,matchNextCursor:null,partial:false};
   const result=compile('pages/entry/index.wxml')(data),all=nodes(result),copy=text(result);

@@ -1,8 +1,9 @@
 const records = require('../utils/records');
 const store = require('../utils/store');
 const offline = require('../data/offline');
+const history = require('../utils/study-history');
 const DAY = 86400000;
-function dayKey(now = Date.now()) { const date = new Date(now); return date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0'); }
+const dayKey=history.dayKey;
 function state() { const data=records.read('study', { version: 1, decks: [], cards: {}, days: {}, events: [], plan: { dailyNew: 20, dailyReview: 100 }, pending: null });data.cards=Object.assign(Object.create(null),data.cards);return data; }
 function save(data) { records.write('study', data); }
 function decks() { const data = state(); return [{ id:'favorites', name:'全部生词', count:store.favorites().length, system:true }, { id:'starter', name:'基础与语法 · 内置词表', count:Object.keys(offline.entries).length, system:true }].concat(store.groups().map(group=>({id:'book:'+group.id,name:group.name,count:group.count,system:true})),data.decks.map(deck => ({id:deck.id,name:deck.name,count:deck.words.length,created:deck.created,system:false}))); }
@@ -54,8 +55,9 @@ function queue(deck, now = Date.now(), practice = false) {
 function review(word, grade, options = {}) {
   if (!['again','hard','good','easy'].includes(grade)) throw new Error('未知的复习评分');
   word = store.key(word); if (!word || word.length > 256) throw new Error('无效单词');
-  const data = state(), now = options.now || Date.now(), event = options.event || '';
-  if (event && data.events.includes(event)) return { duplicate:true, card:data.cards[word] };
+  const data = state(), now = options.now===undefined?Date.now():options.now, event = options.event || '', mode=options.mode||'flash', seconds=Math.min(600,Math.max(0,Math.round(options.seconds || 0)));
+  if(!Number.isSafeInteger(now)||now<0||!Number.isFinite(new Date(now).getTime())||typeof event!=='string'||event.length>256||/[\x00-\x1f]/.test(event)||!history.MODES.includes(mode)||!Number.isFinite(seconds))throw new Error('复习记录参数无效');
+  if (event && (data.events.includes(event)||(data.reviewLog||[]).some(row=>row.id===event))) return { duplicate:true, card:data.cards[word] };
   const first = !data.cards[word], card = data.cards[word] || { repetitions:0, interval:0, ease:2.5, lapses:0, due:now, introduced:now, known:false };
   if (grade === 'again') { card.interval = 10/1440; card.repetitions = 0; card.lapses++; card.ease = Math.max(1.3,card.ease-0.2); }
   if (grade === 'hard') { card.interval = card.repetitions ? Math.max(1,card.interval*1.2) : 0.5; card.repetitions++; card.ease = Math.max(1.3,card.ease-0.15); }
@@ -63,9 +65,10 @@ function review(word, grade, options = {}) {
   if (grade === 'easy') { card.interval = card.repetitions ? Math.max(4,card.interval*card.ease*1.3) : 4; card.repetitions++; card.ease = Math.min(3.0,card.ease+0.15); }
   card.due = now + Math.round(card.interval*DAY); card.lastReviewed = now; data.cards[word] = card;
   const key = dayKey(now), day = data.days[key] || { new:0, review:0, correct:0, attempts:0, seconds:0 };
-  day[first ? 'new':'review']++; day.attempts++; if (grade !== 'again') day.correct++; day.seconds += Math.min(600,Math.max(0,Math.round(options.seconds || 0))); data.days[key] = day;
+  day[first ? 'new':'review']++; day.attempts++; if (grade !== 'again') day.correct++; day.seconds += seconds; data.days[key] = day;
   if (event) data.events = data.events.concat(event).slice(-500);
   const dates = Object.keys(data.days).sort(); for (const old of dates.slice(0,Math.max(0,dates.length-400))) delete data.days[old];
+  data.reviewLog=history.ordered((data.reviewLog||[]).concat({id:event||'review-'+now+'-'+Math.random().toString(36).slice(2,10),word,grade,mode,at:now,day:key,seconds,first}).filter(row=>Object.prototype.hasOwnProperty.call(data.days,row.day)));
   save(data); return { card, today:day, first };
 }
 function known(word, value) { const data = state(), key = store.key(word);if(!key||key.length>256)throw new Error('无效单词');data.cards[key] = Object.assign({ repetitions:0, interval:0, ease:2.5, due:Date.now(), lapses:0 },data.cards[key] || {},{known:!!value});if(!value){data.cards[key].due=Date.now();data.cards[key].interval=0;data.cards[key].repetitions=0;}save(data); }

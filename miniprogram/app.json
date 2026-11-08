@@ -5,6 +5,7 @@
     "pages/notebook/index",
     "pages/groups/index",
     "pages/study/index",
+    "pages/statistics/index",
     "pages/profile/index",
     "pages/entry/index",
     "pages/dictionary-media/index",

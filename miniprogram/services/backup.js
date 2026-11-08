@@ -1,4 +1,5 @@
 const store=require('../utils/store');const records=require('../utils/records');const library=require('./library');
+const history=require('../utils/study-history');
 const object=value=>!!value&&typeof value==='object'&&!Array.isArray(value);
 const text=(value,max,required=false)=>typeof value==='string'&&value.length<=max&&(!required||!!value.trim());
 const number=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
@@ -15,6 +16,7 @@ function validate(type,value){
   array(value.decks,30,item=>text(item.id,100,true)&&text(item.name,40,true)&&Array.isArray(item.words)&&item.words.length<=10000&&item.words.every(word));
   for(const [key,card]of Object.entries(value.cards))if(!word(key)||!object(card)||!['repetitions','interval','ease','lapses','due'].every(field=>number(card[field]))||typeof card.known!=='boolean')invalid();
   for(const [day,data]of Object.entries(value.days))if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!object(data)||!['new','review','correct','attempts','seconds'].every(field=>number(data[field])))invalid();
+  if(!history.valid(value.reviewLog,value.days))invalid();
   if(value.pending!=null){const item=value.pending;if(!object(item)||!text(item.id,100,true)||!text(item.deck,100,true)||!['flash','spell','choice'].includes(item.mode)||!Array.isArray(item.words)||item.words.length>400||!item.words.every(word)||!Number.isInteger(item.index)||item.index<0||item.index>item.words.length||!Number.isInteger(item.done)||item.done<0||item.done>item.index)invalid();}
   if(value.playback!=null){const item=value.playback;if(!object(item)||!text(item.deck,100,true)||!Number.isInteger(item.index)||item.index<0||item.index>10000||!text(item.word,256)||!['UK','US'].includes(item.variant)||(item.voiceMode!==undefined&&!['auto','tts','original'].includes(item.voiceMode))||![2,3,5,8,10].includes(item.interval)||['loop','readMeaning','showMeaning'].some(field=>typeof item[field]!=='boolean'))invalid();}
  }else if(type==='library')array(value.articles,100,item=>text(item.id,100,true)&&text(item.title,100,true)&&text(item.text,200000,true)&&number(item.created)&&number(item.progress)&&!!library.validateArticleAnnotations(item));
@@ -30,5 +32,13 @@ function remapBooks(value,root,learning){
  const mapping=new Map();for(const group of root.learning.groups||[]){const current=learning.groups.find(item=>item.id===group.id)||learning.groups.find(item=>store.groupKey(item.name)===store.groupKey(group.name));if(current)mapping.set(group.id,current.id);}
  const result=Object.assign({},value);for(const key of ['pending','playback'])if(value[key]&&value[key].deck.startsWith('book:')){const id=mapping.get(value[key].deck.slice(5));if(id)result[key]=Object.assign({},value[key],{deck:'book:'+id});}return result;
 }
-function importAll(text){const root=parse(text);if(root.format==='hange-local-notebook')return {favorites:store.importJson(text),types:[]};const learning=store.mergeSnapshot(root.learning),prepared=[];for(const [type,value]of Object.entries(root.records)){const incoming=type==='study'?remapBooks(value,root,learning):value;const merged=merge(type,records.read(type,{}),incoming);validate(type,merged);prepared.push(records.prepare(type,merged));}records.commit(prepared,learning);return {favorites:learning.favorites.length,types:prepared.map(item=>item.name)};}
+function importAll(text){
+ const root=parse(text);if(root.format==='hange-local-notebook')return {favorites:store.importJson(text),types:[]};const learning=store.mergeSnapshot(root.learning),prepared=[];
+ for(const [type,value]of Object.entries(root.records)){
+  const incoming=type==='study'?remapBooks(value,root,learning):value,current=records.read(type,{}),merged=merge(type,current,incoming);
+  if(type==='study'&&(current.reviewLog!==undefined||incoming.reviewLog!==undefined))merged.reviewLog=history.ordered((current.reviewLog||[]).concat((incoming.reviewLog||[]).filter(row=>!Object.prototype.hasOwnProperty.call(current.days||{},row.day))));
+  validate(type,merged);prepared.push(records.prepare(type,merged));
+ }
+ records.commit(prepared,learning);return {favorites:learning.favorites.length,types:prepared.map(item=>item.name)};
+}
 module.exports={exportAll,parse,importAll};
