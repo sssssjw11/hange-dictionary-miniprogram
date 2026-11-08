@@ -67,6 +67,12 @@ test('learning history renders honest partial records, native date selection and
   const empty=compile('pages/statistics/index.wxml')(Object.assign({},data,{rows:[],recorded:0,pages:0,partial:false,selected:{attempts:0}}));assert.ok(text(empty).includes('这一天还没有提交学习记录'));assert.ok(!text(empty).includes('只有汇总数据'));
 });
 
+test('daily shadowing exposes real recording states and prevents source audio from playing into the microphone',()=>{
+  const data={theme:'light',item:{date:'2026-11-08',source:'Original example',word:'practice',en:'Keep a little time for practice.',zh:'留点时间练习。'},listening:true,revealed:false,recording:true,recordPending:false,recordSeconds:3,recordReady:false};
+  const result=compile('pages/daily/index.wxml')(data),all=nodes(result);assert.ok(text(result).includes('结束录音'));assert.ok(text(result).includes('3 秒'));assert.ok(text(result).includes('换句或离开页面后清理'));assert.equal(all.find(node=>node.attr&&node.attr.bindtap==='onPlay').attr.disabled,true);assert.equal(all.find(node=>node.attr&&node.attr.bindtap==='onReplay').attr.disabled,true);
+  const recorded=compile('pages/daily/index.wxml')(Object.assign({},data,{recording:false,recordReady:true,recordDuration:'2.3 秒',replaying:true}));assert.ok(text(recorded).includes('重新录音'));assert.ok(text(recorded).includes('停止回听'));assert.ok(text(recorded).includes('2.3 秒'));
+});
+
 test('spelling suggestions keep the typed query and offer word buttons without Chinese pagination or an irrelevant retry',()=>{
   const data={loading:false,entry:null,resultKind:'missing',suggestionKind:'spelling',matchQuery:'semantci',matches:[{word:'semantic',meaning:'原创释义'}],error:'未找到这个拼写，选择下面的词条继续查词。',matchPage:0,matchNextCursor:null,partial:false};
   const result=compile('pages/entry/index.wxml')(data),all=nodes(result),copy=text(result);

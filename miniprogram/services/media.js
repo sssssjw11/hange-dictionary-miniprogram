@@ -31,6 +31,20 @@ function playDownloaded(file,data,waitForEnd,generation,onStart,owned=false){
 function playLocal(file,onStart){stopAudio();return playDownloaded(file,{originalRecording:true},true,audioGeneration,onStart);}
 function speakAndWait(text,variant,language='en',rate,onStart){return speak(text,variant,language,rate,true,onStart);}
 function stopAudio(){audioGeneration++;if(settleAudio){settleAudio({cancelled:true});settleAudio=null;}const context=audio;audio=null;if(context){try{context.stop();}catch(_){}try{context.destroy();}catch(_){}}const file=ownedAudioFile;ownedAudioFile='';discardDownload(file);}
-async function startRecord(onStart){const generation=recordGeneration;const caps=await available();if(generation!==recordGeneration)return {cancelled:true};if(!caps.asr.available)throw new Error(caps.asr.reason);if(recording)throw new Error('录音正在进行');const manager=wx.getRecorderManager();let cancelled=false;return new Promise((resolve,reject)=>{const cleanup=()=>{manager.offStop(stop);manager.offError(error);manager.offStart(start);recording=null;};const stop=result=>{cleanup();resolve(cancelled?{cancelled:true}:result);};const error=value=>{cleanup();if(cancelled)resolve({cancelled:true});else reject(new Error(value.errMsg||'录音未成功，请检查麦克风授权'));};const start=()=>{if(cancelled)manager.stop();else if(onStart)onStart();};manager.onStop(stop);manager.onError(error);manager.onStart(start);recording={stop(){manager.stop();},cancel(){cancelled=true;manager.stop();}};try{manager.start({duration:60000,sampleRate:16000,numberOfChannels:1,format:'wav'});}catch(value){error(value);}});}
+function beginRecord(onStart,format){
+ if(recording)throw new Error('录音正在进行');if(typeof wx.getRecorderManager!=='function')throw new Error('当前微信客户端不支持录音，请更新后重试');
+ const manager=wx.getRecorderManager();recordGeneration++;let cancelled=false,settled=false,stopping=false,notified=false,session;
+ return new Promise((resolve,reject)=>{
+  const cleanup=()=>{manager.offStop(stop);manager.offError(error);manager.offStart(start);if(recording===session)recording=null;};
+  const stop=result=>{if(settled)return;settled=true;cleanup();if(cancelled){discardDownload((result||{}).tempFilePath);resolve({cancelled:true});}else resolve(result);};
+  const error=value=>{if(settled)return;settled=true;cleanup();if(cancelled)resolve({cancelled:true});else reject(new Error((value||{}).errMsg||'录音未成功，请检查麦克风授权'));};
+  const requestStop=()=>{if(stopping)return;try{manager.stop();stopping=true;}catch(_){}};
+  const start=()=>{if(settled)return;stopping=false;if(cancelled)requestStop();else if(!notified){notified=true;if(onStart)onStart();}};
+  manager.onStop(stop);manager.onError(error);manager.onStart(start);session=recording={stop:requestStop,cancel(){cancelled=true;requestStop();}};
+  try{manager.start(Object.assign({duration:60000,sampleRate:16000,numberOfChannels:1,format},format==='mp3'?{encodeBitRate:48000}:{}));}catch(value){error(value);}
+ });
+}
+async function startRecord(onStart){const generation=recordGeneration,caps=await available();if(generation!==recordGeneration)return {cancelled:true};if(!caps.asr.available)throw new Error(caps.asr.reason);return beginRecord(onStart,'wav');}
+async function startLocalRecord(onStart){return beginRecord(onStart,'mp3');}
 function stopRecord(cancel=false){if(cancel)recordGeneration++;if(recording)recording[cancel?'cancel':'stop']();}
-module.exports={available,speak,speakAndWait,playLocal,stopAudio,startRecord,stopRecord};
+module.exports={available,speak,speakAndWait,playLocal,stopAudio,startRecord,startLocalRecord,stopRecord};
