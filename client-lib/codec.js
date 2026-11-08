@@ -25,7 +25,14 @@ export function decodeDeltas(value) {
   if (shift) throw new Error('词库索引不完整'); return result;
 }
 const ignored = new Set(['script','style','link','meta','base','iframe','object','embed','img','audio','video','source','audio-wr']);
-const allowed = new Set(['div','span','p','b','strong','i','em','u','s','sub','sup','br','hr','ul','ol','li','h1','h2','h3','h4','blockquote']);
+const allowed = new Set(['div','span','p','b','strong','i','em','u','s','sub','sup','br','hr','ul','ol','li','h1','h2','h3','h4','blockquote','table','tbody','thead','tfoot','tr','td','th','caption','col','colgroup']);
+const cellStyle='max-width:100%;word-break:normal;overflow-wrap:break-word;line-height:1.75;padding:8px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:break-word;';
+function completeTableColumns(children){
+  const rows=[];let hasColumns=false,hasSpan=false;
+  function visit(node){if(!node||node.type==='text')return;if(node.name==='col'||node.name==='colgroup'){hasColumns=true;return;}if(node.name==='tr'){const cells=(node.children||[]).filter(item=>item.type!=='text'&&(item.name==='td'||item.name==='th'));if(cells.some(item=>(item.attrs||{}).rowspan||(item.attrs||{}).colspan))hasSpan=true;rows.push({node,cells});return;}if(['tbody','thead','tfoot'].includes(node.name))for(const child of node.children||[])visit(child);}
+  for(const child of children)visit(child);const width=Math.max(0,...rows.map(row=>row.cells.length));if(hasColumns||hasSpan||width<2||width>16)return;
+  for(const row of rows)for(let missing=width-row.cells.length;missing>0;missing--)row.node.children.push({type:'node',name:'td',attrs:{style:cellStyle},children:[]});
+}
 function text(node) { return node.type === 'text' ? node.data : (node.children || []).filter(child => !ignored.has(child.name)).map(text).join(''); }
 function inlineTranslation(node) {
   for(let parent=node.parent;parent;parent=parent.parent){
@@ -51,7 +58,7 @@ function summaryParts(root) {
 function summary(parts) { return Array.from((parts.definitions.length?parts.definitions:parts.fallback.slice(0,1)).join(' / ')).slice(0,240).join(''); }
 export function oxfordSummary(html) { return summary(summaryParts(parseDocument(html,{decodeEntities:true}))); }
 export function renderOxford(pages) {
-  const blocks = [], related = [], phonetics = {}, examples = [], parts={definitions:[],fallback:[]},anchors=[],contents=[],references=[],referenceOccurrences=[],localLinks=[],wordListLinks=[],mediaRefs=[],learning=emptyLearning(); let chineseNodes = 0, senses = 0;
+  const blocks = [], related = [], phonetics = {}, examples = [], parts={definitions:[],fallback:[]},anchors=[],contents=[],references=[],referenceOccurrences=[],localLinks=[],wordListLinks=[],mediaRefs=[],learning=emptyLearning(); let chineseNodes = 0, senses = 0, tableCount=0;
   pages.forEach((page, pageIndex) => {
     const root = parseDocument(page.html, { decodeEntities: true });
     mediaRefs.push(...mediaReferences(root));
@@ -74,8 +81,11 @@ export function renderOxford(pages) {
         const value = find(node); if (value) phonetics[classes.has('phons_br') ? 'uk' : 'us'] = value;
       }
       let tag = allowed.has(name) ? name : 'span', style = 'max-width:100%;word-break:normal;overflow-wrap:break-word;line-height:1.75;';
-      if (['html','body','section','article','table','tbody','thead','tfoot','tr','deft','xt'].includes(name)) tag = 'div';
-      if (['td','th'].includes(name)) { tag = 'span'; style += 'display:inline-block;padding-right:12px;'; }
+      if (['html','body','section','article','deft','xt'].includes(name)) tag = 'div';
+      if(name==='table'){tableCount++;style+='width:100%;table-layout:fixed;border-collapse:collapse;margin:10px 0 14px;';}
+      if(name==='tr')style+='border-bottom:1px solid #9dbbd233;';
+      if(name==='td'||name==='th')style+='padding:8px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:break-word;';
+      if(name==='th'||name==='caption')style+='font-weight:600;text-align:left;';
       if (name === 'chn') style += inlineTranslation(node)?'display:inline;opacity:.8;margin-left:5px;':'display:block;opacity:.85;margin:2px 0 7px;';
       if (['deft','xt'].includes(name)) style += 'margin:3px 0 9px;';
       if (classes.has('sense')) {tag='div';style += 'margin:14px 0;';}
@@ -102,11 +112,19 @@ export function renderOxford(pages) {
       if (classes.has('phons_br')) children.unshift({ type: 'text', text: '英 ' });
       if (classes.has('phons_n_am')) children.unshift({ type: 'text', text: '美 ' });
       const number=sensePrefix(node);if(number)children.unshift({type:'text',text:number});
-      return { type: 'node', name: tag, attrs: { style }, children };
+      if(name==='table')completeTableColumns(children);
+      const attrs={style},allowedSpans=name==='td'||name==='th'?['colspan','rowspan']:name==='col'||name==='colgroup'?['span']:[];
+      for(const key of allowedSpans){const value=String((node.attribs||{})[key]||'').trim();if(/^(?:[1-9]\d{0,2}|1000)$/.test(value))attrs[key]=value;}
+      return { type: 'node', name: tag, attrs, children };
     }
     function fragments(node) {
       if (utf8Length(JSON.stringify(node)) <= 18000) return [node];
       if (node.type === 'text') { const chunks = []; for (let i = 0; i < node.text.length; i += 3000) { let end = Math.min(node.text.length, i + 3000); if (end < node.text.length && /[\uD800-\uDBFF]/.test(node.text[end - 1])) end--; chunks.push({ type:'text', text:node.text.slice(i,end) }); i = end - 3000; } return chunks; }
+      if(['table','tbody','thead','tfoot'].includes(node.name)){
+        const chunks=[];let current=[];const wrap=children=>Object.assign({},node,{children});
+        for(const child of node.children||[])for(const part of fragments(child)){if(current.length&&utf8Length(JSON.stringify(wrap(current.concat([part]))))>18000){chunks.push(wrap(current));current=[];}current.push(part);}
+        if(current.length)chunks.push(wrap(current));return chunks;
+      }
       return (node.children || []).flatMap(child => fragments(child).map(fragment => Object.assign({}, node, { children: [fragment] })));
     }
     let current = [], size = 0;
@@ -123,5 +141,5 @@ export function renderOxford(pages) {
   const seen=new Set(),uniqueReferences=references.filter(row=>{const key=row.word+'\0'+row.anchor;if(seen.has(key))return false;seen.add(key);return true;});
   const listIds=new Set(),uniqueListLinks=wordListLinks.filter(row=>{if(listIds.has(row.id))return false;listIds.add(row.id);return true;});
   const mediaKeys=new Set(),uniqueMedia=mediaRefs.filter(row=>{if(mediaKeys.has(row.key))return false;mediaKeys.add(row.key);return true;});
-  return { title: '牛津高阶英汉双解 · 第10版', documents: pages.length, blocks, related: Array.from(new Set(related)), phonetics, chineseNodes, senses, examples, brief:summary(parts),navVersion:1,anchors,contents,references:uniqueReferences,referenceVersion:1,referenceOccurrences,localLinks,learningVersion:1,learning,wordListVersion:1,wordListLinks:uniqueListLinks,mediaVersion:2,mediaRefs:uniqueMedia };
+  return { title: '牛津高阶英汉双解 · 第10版', documents: pages.length, blocks, related: Array.from(new Set(related)), phonetics, chineseNodes, senses, examples, brief:summary(parts),tableVersion:1,tableCount,navVersion:1,anchors,contents,references:uniqueReferences,referenceVersion:1,referenceOccurrences,localLinks,learningVersion:1,learning,wordListVersion:1,wordListLinks:uniqueListLinks,mediaVersion:2,mediaRefs:uniqueMedia };
 }

@@ -71,7 +71,7 @@ class Engine:
         return {'ready': self.base.is_file() or self.oxford.is_file(), 'oxford': self.oxford.is_file(),
                 'baseEntries': self.counts['base'],
                 'oxfordDefinitions': self.counts['oxford'],
-                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.21.0'}
+                'oxfordChineseIndex': self.oxford_chinese, 'oxfordChineseSingleCharacter': self.oxford_single_character, 'version': '2.22.0'}
 
     def _oxford(self, word):
         if not self.oxford.is_file():
@@ -296,6 +296,7 @@ class Engine:
                 data['forms'].append({'label': labels[code], 'word': word})
         data['tags'] = (data.pop('tagsRaw', '') or '').split()
         blocks, related, examples, phonetics, brief = [], [], [], {}, ''
+        table_count=0
         anchors=[];contents=[];references=[];reference_occurrences=[];local_links=[];word_list_links=[];media_refs=[];learning=empty_learning()
         for document,(identifier, headword, html) in enumerate(pages):
             first_block=len(blocks)
@@ -304,7 +305,7 @@ class Engine:
             for nodes in rendered:
                 blocks.append({'id': str(identifier) + '-' + str(len(blocks)), 'nodes': nodes})
             related.extend(links)
-            examples.extend(info['examples']);phonetics.update(info['phonetics'])
+            examples.extend(info['examples']);phonetics.update(info['phonetics']);table_count+=info['tableCount']
             if not brief:brief=info['brief']
             for name,target in [('anchors',anchors),('contents',contents),('referenceOccurrences',reference_occurrences)]:
                 for ordinal,item in enumerate(info[name]):
@@ -325,7 +326,7 @@ class Engine:
         media_keys=set();unique_media=[]
         for item in media_refs:
             if item['key'] not in media_keys:media_keys.add(item['key']);unique_media.append(item)
-        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'referenceVersion':1,'referenceOccurrences':reference_occurrences,'localLinks':local_links,'learningVersion':1,'learning':learning,'wordListVersion':1,'wordListLinks':unique_list_links,'mediaVersion':2,'mediaRefs':unique_media,'sourceSha256':self.oxford_source_sha}
+        data['oxford'] = {'title': '牛津高阶英汉双解 · 第10版', 'documents': len(pages), 'blocks': blocks,'examples':examples,'phonetics':phonetics,'brief':brief,'tableVersion':1,'tableCount':table_count,'navVersion':1,'anchors':anchors,'contents':contents,'references':unique_references,'referenceVersion':1,'referenceOccurrences':reference_occurrences,'localLinks':local_links,'learningVersion':1,'learning':learning,'wordListVersion':1,'wordListLinks':unique_list_links,'mediaVersion':2,'mediaRefs':unique_media,'sourceSha256':self.oxford_source_sha}
         data['brief']=brief
         data['phonetics']=phonetics
         related.extend((data.get('teaching') or {}).get('related', []))
@@ -352,7 +353,7 @@ def rich_blocks(html, with_info=False,word=''):
                 related.append(word)
         elif href.lower().startswith('sound:'):
             anchor.decompose()
-    allowed = {'div', 'span', 'p', 'b', 'strong', 'i', 'em', 'u', 's', 'sub', 'sup', 'br', 'hr', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'blockquote'}
+    allowed = {'div', 'span', 'p', 'b', 'strong', 'i', 'em', 'u', 's', 'sub', 'sup', 'br', 'hr', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'blockquote', 'table', 'tbody', 'thead', 'tfoot', 'tr', 'td', 'th', 'caption', 'col', 'colgroup'}
     blocks = []
 
     def inline_translation(node):
@@ -363,6 +364,26 @@ def rich_blocks(html, with_info=False,word=''):
                 return True
         return False
 
+    cell_style='max-width:100%;word-break:normal;overflow-wrap:break-word;line-height:1.75;padding:8px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:break-word;'
+    def complete_table_columns(children):
+        rows=[];has_columns=False;has_span=False
+        def visit(node):
+            nonlocal has_columns,has_span
+            if node.get('type')=='text':return
+            name=node.get('name')
+            if name in {'col','colgroup'}:has_columns=True;return
+            if name=='tr':
+                cells=[item for item in node.get('children',[]) if item.get('type')!='text' and item.get('name') in {'td','th'}]
+                if any(item.get('attrs',{}).get('rowspan') or item.get('attrs',{}).get('colspan') for item in cells):has_span=True
+                rows.append((node,cells));return
+            if name in {'tbody','thead','tfoot'}:
+                for child in node.get('children',[]):visit(child)
+        for child in children:visit(child)
+        width=max((len(cells) for _,cells in rows),default=0)
+        if has_columns or has_span or width<2 or width>16:return
+        for node,cells in rows:
+            for _ in range(width-len(cells)):node['children'].append({'type':'node','name':'td','attrs':{'style':cell_style},'children':[]})
+
     def convert(node):
         if isinstance(node, Comment):
             return None
@@ -370,13 +391,14 @@ def rich_blocks(html, with_info=False,word=''):
             return {'type': 'text', 'text': str(node)} if str(node) else None
         name, classes = node.name.lower(), set(node.get('class', []))
         style = 'max-width:100%;word-break:normal;overflow-wrap:break-word;line-height:1.75;'
-        if name in {'html', 'body', 'section', 'article', 'table', 'tbody', 'thead', 'tfoot', 'tr', 'deft', 'xt'}:
+        if name in {'html', 'body', 'section', 'article', 'deft', 'xt'}:
             tag = 'div'
-        elif name in {'td', 'th'}:
-            tag = 'span'
-            style += 'display:inline-block;padding-right:12px;'
         else:
             tag = name if name in allowed else 'span'
+        if name=='table':style+='width:100%;table-layout:fixed;border-collapse:collapse;margin:10px 0 14px;'
+        if name=='tr':style+='border-bottom:1px solid #9dbbd233;'
+        if name in {'td','th'}:style+='padding:8px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:break-word;'
+        if name in {'th','caption'}:style+='font-weight:600;text-align:left;'
         if name == 'chn':
             style += 'display:inline;opacity:.8;margin-left:5px;' if inline_translation(node) else 'display:block;opacity:.85;margin:2px 0 7px;'
         if name in {'deft', 'xt'}:
@@ -420,7 +442,12 @@ def rich_blocks(html, with_info=False,word=''):
             children.insert(0, {'type': 'text', 'text': '美 '})
         number=sense_prefix(node)
         if number:children.insert(0,{'type':'text','text':number})
-        return {'type': 'node', 'name': tag, 'attrs': {'style': style}, 'children': children}
+        if name=='table':complete_table_columns(children)
+        attrs={'style':style}
+        for key in (['colspan','rowspan'] if name in {'td','th'} else ['span'] if name in {'col','colgroup'} else []):
+            value=str(node.get(key,'')).strip()
+            if re.fullmatch(r'(?:[1-9]\d{0,2}|1000)',value):attrs[key]=value
+        return {'type': 'node', 'name': tag, 'attrs': attrs, 'children': children}
 
     def size(node):
         return len(json.dumps(node, ensure_ascii=False).encode())
@@ -431,6 +458,14 @@ def rich_blocks(html, with_info=False,word=''):
         elif node['type'] == 'text':
             for start in range(0, len(node['text']), 3000):
                 yield {'type': 'text', 'text': node['text'][start:start + 3000]}
+        elif node.get('name') in {'table','tbody','thead','tfoot'}:
+            current=[]
+            for child in node.get('children',[]):
+                for part in fragments(child):
+                    if current and size(dict(node,children=current+[part]))>18000:
+                        yield dict(node,children=current);current=[]
+                    current.append(part)
+            if current:yield dict(node,children=current)
         else:
             for child in node.get('children', []):
                 for fragment in fragments(child):
@@ -458,5 +493,5 @@ def rich_blocks(html, with_info=False,word=''):
         examples=[]
         for node in soup.select('.x'):
             sibling=node.find_next_sibling();examples.append({'en':node.get_text(' ',strip=True),'zh':sibling.get_text(' ',strip=True) if sibling and sibling.name.lower()=='xt' else '', 'source':'牛津十版'})
-        return blocks,list(dict.fromkeys(related)),dict(navigation(soup,blocks,word),phonetics=phonetics,examples=examples,brief=oxford_summary(soup),mediaRefs=media_refs)
+        return blocks,list(dict.fromkeys(related)),dict(navigation(soup,blocks,word),phonetics=phonetics,examples=examples,brief=oxford_summary(soup),mediaRefs=media_refs,tableCount=len(soup.find_all('table')))
     return blocks, list(dict.fromkeys(related))
